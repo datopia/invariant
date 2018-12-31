@@ -35,7 +35,6 @@
                               'd/q}
                              (keys datahike.query/built-ins))))
 
-
 (defn valid-query? [query]
   (let [res (p/parse-query query)
         called-fns (->>
@@ -45,6 +44,10 @@
                                 (or
                                  (= datahike.parser.Function t)
                                  (= datahike.parser.Predicate t))))))]
+    (when-not (= (count (:qin res)) 4)
+      (throw (ex-info "The query operates on exactly 4 sources: $before, $after, $empty+tx, $txs"
+                      {:type ::number-of-soures-not-4
+                       :sources (:qin res)})))
     (doseq [c called-fns]
       (let [f (:symbol (:fn c))]
         (when (#{'datahike.api/q 'd/q} f)

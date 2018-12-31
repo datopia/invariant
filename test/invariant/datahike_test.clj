@@ -21,11 +21,13 @@
                                                     #datahike.parser.Constant{:value 5}]}}
            (try
             (valid-query? '[:find ?a
-                            :in $
+                            :in $a $b $c $d
                             :where
                             [(datahike.api/q [:find ?a
+                                              :in $a $b $c $d
                                                :where
-                                               [(nested-evil ?a 5)]]) ?a]]) 
+                                              [(nested-evil ?a 5)]]
+                                             $a $b $c $d) ?a]]) 
             (catch Exception e
               (ex-data e)))))))
 
@@ -78,12 +80,12 @@
           [[:db/add (d/tempid -1) :invariant/rule :account/balance]
            [:db/add (d/tempid -1) :invariant/query
             (pr-str '[:find ?matches .
-                      :in $before $after $txn
+                      :in $before $after $txn $txs
                       :where
                       ;; run the sub-query
                       [(d/q [:find (sum ?balance-before) (sum ?balance-after) (sum ?balance-change)
                              :with ?affected-entity
-                             :in $before $after $txn
+                             :in $before $after $txn $txs
                              :where
                              [(evil-haha 1 2 3)]
                              ;; Unify data from databases and transactions with affected-entity
@@ -102,7 +104,7 @@
                              #_[$txn    _                 :transaction/signed-by ?sender]
                              #_[(datopia.attribute-invariants/balance-check
                                 ?sender ?affected-entity ?balance-before ?balance-after)]]
-                            $before $after $txn)
+                            $before $after $txn $txs)
                        [[?sum-before ?sum-after ?sum-change]]]
                       [(= ?sum-before ?sum-after)]
                       [(= ?sum-change 0) ?matches]])]]]
@@ -124,12 +126,12 @@
           [[:db/add tid :invariant/rule :account/balance]
            [:db/add tid :invariant/query
             (pr-str '[:find ?matches .
-                      :in $before $after $txn
+                      :in $before $after $txn $txs
                       :where
                       ;; run the sub-query
                       [(d/q [:find (sum ?balance-before) (sum ?balance-after) (sum ?balance-change)
                              :with ?affected-entity
-                             :in $before $after $txn
+                             :in $before $after $txn $txs
                              :where
                              ;; Unify data from databases and transactions with affected-entity
                              [$after    ?affected-entity         :account/balance    ?balance-after]
@@ -147,7 +149,7 @@
                              #_[$txn    _                 :transaction/signed-by ?sender]
                              #_[(datopia.attribute-invariants/balance-check
                                 ?sender ?affected-entity ?balance-before ?balance-after)]]
-                            $before $after $txn)
+                            $before $after $txn $txs)
                        [[?sum-before ?sum-after ?sum-change]]]
                       [(= ?sum-before ?sum-after)]
                       [(= ?sum-change 0) ?matches]])]]]
