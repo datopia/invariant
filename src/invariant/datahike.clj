@@ -46,7 +46,7 @@
                                  (= datahike.parser.Predicate t))))))]
     (when-not (= (count (:qin res)) 4)
       (throw (ex-info "The query operates on exactly 4 sources: $before, $after, $empty+tx, $txs"
-                      {:type :invariant/number-of-soures-not-4
+                      {:type :invariant/number-of-sources-not-4
                        :sources (:qin res)})))
     (doseq [c called-fns]
       (let [f (:symbol (:fn c))]
@@ -90,7 +90,6 @@
                                                  :invariant (edn/read-string inv-qs)
                                                  :tx-data tx-data})))))
     true))
-
 
 
 (defmethod invariant.core/invariant :datahike
