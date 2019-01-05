@@ -35,7 +35,6 @@
                               'd/q}
                              (keys datahike.query/built-ins))))
 
-
 (defn valid-query? [query]
   (let [res (p/parse-query query)
         called-fns (->>
@@ -45,13 +44,17 @@
                                 (or
                                  (= datahike.parser.Function t)
                                  (= datahike.parser.Predicate t))))))]
+    (when-not (= (count (:qin res)) 4)
+      (throw (ex-info "The query operates on exactly 4 sources: $before, $after, $empty+tx, $txs"
+                      {:type :invariant/number-of-sources-not-4
+                       :sources (:qin res)})))
     (doseq [c called-fns]
       (let [f (:symbol (:fn c))]
         (when (#{'datahike.api/q 'd/q} f)
           (let [q (:value (first (:args c)))]
             (valid-query? q)))
         (when-not (@allowed-fns f)
-          (throw (ex-info "Function not allowed." {:type ::invalid-function-call
+          (throw (ex-info "Function not allowed." {:type :invariant/invalid-function-call
                                                    :call c})))))))
 
 
@@ -82,12 +85,11 @@
                        ;; empty database with only transaction applied
                        (dc/db-with (dc/empty-db schema) tx-data)
                        tx-data)
-          (throw (ex-info "Invariant mismatch." {:type ::invariant-mismatch
+          (throw (ex-info "Invariant mismatch." {:type :invariant/invariant-mismatch
                                                  :attribute a
                                                  :invariant (edn/read-string inv-qs)
                                                  :tx-data tx-data})))))
     true))
-
 
 
 (defmethod invariant.core/invariant :datahike
