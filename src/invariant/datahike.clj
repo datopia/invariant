@@ -31,6 +31,7 @@
   a)
 
 
+
 (defn ensure-invariances [connection tx-data]
   (let [attribute-txs (map (fn [tx] [(get-attribute tx) tx])
                            tx-data)
@@ -57,12 +58,11 @@
                        ;; empty database with only transaction applied
                        (dc/db-with (dc/empty-db schema) tx-data)
                        tx-data)
-          (throw (ex-info "Invariant mismatch." {:type ::invariant-mismatch
+          (throw (ex-info "Invariant mismatch." {:type :invariant/invariant-mismatch
                                                  :attribute a
                                                  :invariant (edn/read-string inv-qs)
                                                  :tx-data tx-data})))))
     true))
-
 
 
 (defmethod invariant.core/invariant :datahike
