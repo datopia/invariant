@@ -1,28 +1,179 @@
 (ns invariant.datomic
   (:require [datomic.api :as api]
-            [clojure.java.io :as io]))
+            [datahike.parser :as p]
+            [clojure.java.io :as io]
+            [clojure.edn :as edn]
+            [invariant.query :refer [valid-query?]]
+            [invariant.unparse :refer [unparse]]))
+
+
+(defn unnest-deep-queries [[_ query & sources]]
+  (let [res (p/parse-query query)
+        clean-clauses (->> (:qwhere res)
+                         (filter (fn [f] (not= (:symbol (:fn f)) 'datomic.api/q)))
+                         vec)
+        nested-functions (->> (:qwhere res)
+                            (filter (fn [c]
+                                      (let [t (type c)]
+                                        (= datahike.parser.Function t))))
+                            (filter (fn [f] (= (:symbol (:fn f)) 'datomic.api/q))))]
+    (concat
+     (list 'datomic.api/q
+           (unparse
+            (-> res
+                (assoc :qwhere clean-clauses)
+                (update :qin concat (map :binding nested-functions)))))
+     sources
+     (map (comp unnest-deep-queries unparse) nested-functions))))
+
+
+(defn unnest-query [query sources]
+  (unnest-deep-queries (concat ['api/q query] sources)))
+
+(defn get-attribute-dispatch [v]
+  (first v))
+
+(defmulti get-attribute get-attribute-dispatch)
+
+(defn +v [db eid attr delta]
+  (let [m (api/pull db [attr] eid)
+        v (attr m 0)]
+    [[:db/add eid attr (+ v delta)]]))
+
+
+(defmethod get-attribute :+v
+  [[_ _ eid attr delta]]
+  attr)
+
+
+(defmethod get-attribute :db/add
+  [[_ e a v]]
+  a)
+
+
+(let [counter (atom 0)]
+  (defn datomic-empty-db [schema]
+    (let [uri (str "datomic:mem:///temp-invariant-" (swap! counter inc))
+          _ (api/create-database uri)
+          conn (api/connect uri)]
+      @(api/transact conn schema)
+      @(api/transact conn [{:db/id (api/tempid :db.part/user)
+                            :db/ident :+v
+                            :db/fn (api/function {:lang "clojure"
+                                                  :params '[db _ attr eid delta]
+                                                  :code '(let [m (d/pull db [attr] eid)
+                                                               v (attr m 0M)]
+                                                           [[:db/add eid attr (+ v delta)]])})}])
+      (api/db conn)
+      )))
+
+
+(defn ensure-invariances [connection schema tx-data]
+  (let [attribute-txs (map (fn [tx] [(get-attribute tx) tx])
+                           tx-data)
+        attributes (distinct (map first attribute-txs))]
+    (doseq [[a tx] attribute-txs
+            :when (= a :invariant/query)
+            :let [[_ _ _ v] tx]]
+      (valid-query? (edn/read-string v)))
+
+    (doseq [a attributes]
+      (when-let [inv-qs (api/q '[:find ?q .
+                                 :in $ ?a
+                                 :where
+                                 [?e :invariant/rule ?a]
+                                 [?e :invariant/query ?q]]
+                               (api/db connection)
+                               a)]
+        (when-not (api/q (unnest-query (read-string inv-qs))
+                         ;; current state
+                         (api/db connection)
+                         ;; apply transaction to current state
+                         (api/with (api/db connection) tx-data)
+                         ;; empty database with only transaction applied
+                         (api/with (datomic-empty-db schema) tx-data)
+                         tx-data)
+          (throw (ex-info "Invariant mismatch." {:type :invariant/invariant-mismatch
+                                                 :attribute a
+                                                 :invariant (edn/read-string inv-qs)
+                                                 :tx-data tx-data})))
+        ))
+    true))
+
+
+(defmethod invariant.core/invariant :datomic
+  [connection schema tx-data]
+  (ensure-invariances connection schema tx-data))
+
+
+
+
+(comment
+
+;; original
+
+
+(d/q '[:find ?matches .
+      :in $before $after $txn $txs
+      :where
+      ;; run the sub-query
+      [(d/q [:find (sum ?balance-before) (sum ?balance-after) (sum ?balance-change)
+             :with ?affected-entity
+             :in $before $after $txn $txs
+             :where
+             [(evil-haha 1 2 3)]]
+            $before $after $txn $txs)
+       [[?sum-before ?sum-after ?sum-change]]]
+      [(= ?sum-before ?sum-after)]
+       [(= ?sum-change 0) ?matches]]
+     $before $after $txn $txs )
+
+
+
+
+
+
+;; transform
+
+
+
+(d/q '[:find ?matches .
+       :in $before $after $txn $txs ?sum-before ?sum-after ?sum-change
+       :where
+       [(= ?sum-before ?sum-after)]
+       [(= ?sum-change 0) ?matches]]
+     $before $after $txn $txs
+     (d/q '[:find (sum ?balance-before) (sum ?balance-after) (sum ?balance-change)
+            :with ?affected-entity
+            :in $before $after $txn $txs
+            :where
+            [(evil-haha 1 2 3)]]
+          $before $after $txn $txs)
+     )
+
+
+
+
+
+
+
 
 ;; TODO
 ;; cache create empty DB with schema
 
 
-(comment
-  (def uri "datomic:mem:///datopia-transfer-example")
+  (def uri "datomic:mem:///datopia-transfer-example") 
 
-(def schema (-> "schema.edn"
-                io/resource
-                slurp
-                read-string))
 
 (try
   ;; initialize database
   (api/create-database uri)
   (catch Exception e
-    (prn e)))
+    (prn e))) 
 
 (api/delete-database uri)
 
-(def conn (api/connect uri))
+(def conn (api/connect uri)) 
 
 
 
@@ -37,7 +188,7 @@
                   {:db/id 3,
                    :account/name "Danny",
                    :account/balance 3000M,
-                   :account/unit :datom}])
+                   :account/unit :datom}]) 
 
 (def schema [{:db/id #db/id[:db.part/db]
               :db/ident :invariant/rule
@@ -61,9 +212,9 @@
               :db.install/_attribute :db.part/db}
              {:db/id #db/id[:db.part/db]
               :db/ident :account/unit
-              :db/valueType :db.type/keyword
+              :db/valueType :db.ktype/keyword
               :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}])
+              :db.install/_attribute :db.part/db}]) 
 
 @(api/transact conn schema)
 
@@ -122,7 +273,7 @@
                                                  :invariant (read-string inv-qs)
                                                 :tx-data tx-data})))))))
 
-(ensure-invariances-datomic conn schema example-txs)
+(ensure-invariances conn schema example-txs) 
 
 @(api/transact conn [[:db/add 123 :invariant/rule :account/balance]
                    [:db/add 123 :invariant/query
@@ -203,5 +354,6 @@
        (api/db conn)
        :foo)
 
+ 
 
 )

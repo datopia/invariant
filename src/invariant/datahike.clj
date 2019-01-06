@@ -1,9 +1,9 @@
 (ns invariant.datahike
   (:require [datahike.api :as d]
             [datahike.core :as dc]
-            [datahike.parser :as p]
             [datahike.db :as ddb]
             [invariant.core :as ic]
+            [invariant.query :refer [valid-query?]]
             [clojure.edn :as edn]))
 
 
@@ -29,31 +29,6 @@
 (defmethod get-attribute :db/add
   [[_ e a v]]
   a)
-
-
-(def allowed-fns (atom (into #{'datahike.api/q
-                              'd/q}
-                             (keys datahike.query/built-ins))))
-
-
-(defn valid-query? [query]
-  (let [res (p/parse-query query)
-        called-fns (->>
-                    (:qwhere res)
-                    (filter (fn [c]
-                              (let [t (type c)]
-                                (or
-                                 (= datahike.parser.Function t)
-                                 (= datahike.parser.Predicate t))))))]
-    (doseq [c called-fns]
-      (let [f (:symbol (:fn c))]
-        (when (#{'datahike.api/q 'd/q} f)
-          (let [q (:value (first (:args c)))]
-            (valid-query? q)))
-        (when-not (@allowed-fns f)
-          (throw (ex-info "Function not allowed." {:type ::invalid-function-call
-                                                   :call c})))))))
-
 
 
 (defn ensure-invariances [connection tx-data]
@@ -91,5 +66,5 @@
 
 
 (defmethod invariant.core/invariant :datahike
-  [connection tx-data]
+  [connection schema tx-data]
   (ensure-invariances connection tx-data))
