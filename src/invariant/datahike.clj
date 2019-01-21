@@ -2,9 +2,13 @@
   (:require [datahike.api :as d]
             [datahike.core :as dc]
             [datahike.db :as ddb]
+            [datahike.query :as dq]
             [invariant.core :as ic]
             [invariant.query :refer [valid-query?]]
             [clojure.edn :as edn]))
+
+
+(alter-var-root #'dq/built-ins (fn [old] (conj old ['subquery datahike.api/q]))  )
 
 
 (defn get-attribute-dispatch [v]
@@ -32,7 +36,7 @@
 
 
 
-(defn ensure-invariances [connection tx-data]
+(defn ensure-invariants [connection tx-data]
   (let [attribute-txs (map (fn [tx] [(get-attribute tx) tx])
                            tx-data)
         attributes (distinct (map first attribute-txs))
@@ -67,4 +71,4 @@
 
 (defmethod invariant.core/invariant :datahike
   [connection schema tx-data]
-  (ensure-invariances connection tx-data))
+  (ensure-invariants connection tx-data))

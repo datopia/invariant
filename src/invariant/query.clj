@@ -2,9 +2,7 @@
   (:require [datahike.parser :as p]
             [datahike.query]))
 
-(def allowed-fns (atom (into #{'datahike.api/q
-                              'datomic.api/q
-                              'd/q}
+(def allowed-fns (atom (into #{'subquery}
                              (keys datahike.query/built-ins))))
 
 (defn valid-query? [query]
@@ -22,7 +20,7 @@
                        :sources (:qin res)})))
     (doseq [c called-fns]
       (let [f (:symbol (:fn c))]
-        (when (#{'datahike.api/q 'd/q} f)
+        (when (#{'subquery} f)
           (let [q (:value (first (:args c)))]
             (valid-query? q)))
         (when-not (@allowed-fns f)

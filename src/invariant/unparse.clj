@@ -2,7 +2,7 @@
   (:require [datahike.parser :as parser])
   (:import [datahike.parser
             PlainSymbol Constant SrcVar Aggregate
-            Query FindScalar FindRel
+            Query FindScalar FindRel Pattern
             Variable BindScalar Predicate Function BindColl BindTuple]))
 
 ;; inverse to p/parse-query
@@ -10,8 +10,10 @@
 
 (defmethod unparse Function
   [f]
-  (conj (map unparse (:args f))
-        (unparse (:fn f))))
+  #_(prn "fn" f)
+  [(concat [(unparse (:fn f))]
+           (map unparse (:args f)))
+   (unparse (:binding f))])
 
 (defmethod unparse PlainSymbol
   [s]
@@ -30,9 +32,11 @@
   (vec
    (concat
     [:find] (unparse qfind)
+    (when-not (empty? qwith)
+      (conj (map unparse qwith) :with))
     (conj (map unparse qin) :in)
     [:where]
-    (mapv (comp vector unparse) qwhere))))
+    (mapv (comp vec unparse) qwhere))))
 
 (defmethod unparse FindScalar
   [s]
@@ -49,7 +53,7 @@
 
 (defmethod unparse BindColl
   [bc]
-  (unparse (:binding bc)))
+  [(unparse (:binding bc)) '...])
 
 
 (defmethod unparse BindTuple
@@ -58,13 +62,15 @@
 
 
 (defmethod unparse Predicate
-  [{:keys [fn args]}]
-  (conj (map unparse args)
-        (unparse fn)))
+  [{:keys [fn args] :as p}]
+  #_(prn "pred" p)
+  [(conj (map unparse args)
+         (unparse fn))])
 
 
 (defmethod unparse FindRel
   [fr]
+  #_(prn "findrel" fr)
   (map unparse (:elements fr)))
 
 (defmethod unparse Aggregate
@@ -72,3 +78,8 @@
   (conj (map unparse args)
         (unparse fn)))
 
+
+(defmethod unparse Pattern
+  [{:keys [source pattern] :as p}]
+  #_(prn "pattern" p)
+  (concat [(unparse source)] (map unparse pattern)))
