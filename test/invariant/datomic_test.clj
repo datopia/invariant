@@ -90,6 +90,12 @@
 
     (binding [conn (d/connect uri)]
       @(d/transact conn schema) 
+      @(d/transact conn [{:db/id #db/id[:db.part/db]
+                          :db/ident :invariant/query-test
+                          :db/valueType :db.type/string
+                          :db/cardinality :db.cardinality/one
+                          :invariant/query "[:find ...]"
+                          :db.install/_attribute :db.part/db}])
       @(d/transact conn example-txs)
       @(d/transact conn [{:db/id (d/tempid :db.part/user)
                           :db/ident :+v

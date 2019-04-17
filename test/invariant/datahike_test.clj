@@ -165,11 +165,11 @@
             transfer-transaction
             [[:db/add tid :transaction/signed-by 1]
              [:db/add tid :transaction/signed-by 3]
-             [:db.fn/call +v 0 :account/balance  +1]
              [:db.fn/call +v 3 :account/balance  -1]
              [:db.fn/call +v 1 :account/balance -50]
              [:db.fn/call +v 2 :account/balance +52]
-             [:db.fn/call +v 3 :account/balance  -2]]]
+             [:db.fn/call +v 3 :account/balance  -2]
+             [:db.fn/call +v 4 :account/balance  +1]]]
         (is (ensure-invariants conn transfer-transaction)))
 
 
@@ -178,9 +178,9 @@
             invalid-transaction
             [[:db/add tid :transaction/signed-by 1]
              [:db/add tid :transaction/signed-by 3]
-             [:db.fn/call +v 0 :account/balance  +1]
              [:db.fn/call +v 2 :account/balance +52]
-             [:db.fn/call +v 3 :account/balance  -2]]]
+             [:db.fn/call +v 3 :account/balance  -2]
+             [:db.fn/call +v 4 :account/balance  +1]]]
         (is (= {:type :invariant/invariant-mismatch,
                 :attribute :account/balance}
                (try

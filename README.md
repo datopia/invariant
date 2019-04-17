@@ -18,6 +18,6 @@ Add the dependency to your project and follow `datahike_test.clj`.
 
 ## License
 
-Copyright © 2018 Christian Weilbach, Danny Wilson
+Copyright © 2018-2019 Christian Weilbach, 2018 Danny Wilson
 
 Distributed under the MIT License.
