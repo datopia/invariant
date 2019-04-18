@@ -10,7 +10,6 @@
 
 (defmethod unparse Function
   [f]
-  #_(prn "fn" f)
   [(concat [(unparse (:fn f))]
            (map unparse (:args f)))
    (unparse (:binding f))])
@@ -46,7 +45,6 @@
   [v]
   (:symbol v))
 
-
 (defmethod unparse BindScalar
   [v]
   (unparse (:variable v)))
@@ -55,22 +53,17 @@
   [bc]
   [(unparse (:binding bc)) '...])
 
-
 (defmethod unparse BindTuple
   [bt]
   (mapv unparse (:bindings bt)))
 
-
 (defmethod unparse Predicate
   [{:keys [fn args] :as p}]
-  #_(prn "pred" p)
   [(conj (map unparse args)
          (unparse fn))])
 
-
 (defmethod unparse FindRel
   [fr]
-  #_(prn "findrel" fr)
   (map unparse (:elements fr)))
 
 (defmethod unparse Aggregate
@@ -78,8 +71,6 @@
   (conj (map unparse args)
         (unparse fn)))
 
-
 (defmethod unparse Pattern
   [{:keys [source pattern] :as p}]
-  #_(prn "pattern" p)
   (concat [(unparse source)] (map unparse pattern)))

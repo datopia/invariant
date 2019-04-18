@@ -1,7 +1,8 @@
 (ns invariant.datahike-test
+  (:refer-clojure :exclude [+])
   (:require [clojure.test :refer [deftest testing is] :as test]
             [invariant.datahike :refer :all]
-            [invariant.query :refer [valid-query?]]
+            [invariant.query :refer [assert-valid-query]]
             [datahike.api :as d]))
 
 
@@ -11,7 +12,7 @@
            (get-attribute [:db/add 1 :foo 2])))
 
     (is (= :foo
-           (get-attribute [:db.fn/call invariant.datahike/+v 1 :foo 3])))))
+           (get-attribute [:db.fn/call invariant.datahike/+ 1 :foo 3])))))
 
 
 (deftest valid-query-test
@@ -22,14 +23,14 @@
                                                     #datahike.parser.Constant{:value 5}]}}
 
            (try
-            (valid-query? '[:find ?a
-                            :in $a $b $c $d
-                            :where
-                            [(subquery [:find ?a
-                                        :in $a $b $c $d
-                                        :where
-                                        [(nested-evil ?a 5)]]
-                                       $a $b $c $d) ?a]]) 
+            (assert-valid-query '[:find ?a
+                                  :in $a $b $c $d
+                                  :where
+                                  [(subquery [:find ?a
+                                              :in $a $b $c $d
+                                              :where
+                                              [(nested-evil ?a 5)]]
+                                             $a $b $c $d) ?a]]) 
             (catch Exception e
               (ex-data e)))))))
 
@@ -117,7 +118,7 @@
                                                        #datahike.parser.Constant{:value 2}
                                                        #datahike.parser.Constant{:value 3}]}}
              (try
-               (ensure-invariants conn invariant-txs)
+               (assert-invariants conn invariant-txs)
                (catch Exception e
                  (ex-data e))))))))
 
@@ -156,7 +157,7 @@
                        [[?sum-before ?sum-after ?sum-change]]]
                       [(= ?sum-before ?sum-after)]
                       [(= ?sum-change 0) ?matches]])]]]
-      (is (ensure-invariants conn invariant-txs))
+      (is (assert-invariants conn invariant-txs))
       ;; install them
       (d/transact conn invariant-txs)
 
@@ -165,12 +166,12 @@
             transfer-transaction
             [[:db/add tid :transaction/signed-by 1]
              [:db/add tid :transaction/signed-by 3]
-             [:db.fn/call +v 3 :account/balance  -1]
-             [:db.fn/call +v 1 :account/balance -50]
-             [:db.fn/call +v 2 :account/balance +52]
-             [:db.fn/call +v 3 :account/balance  -2]
-             [:db.fn/call +v 4 :account/balance  +1]]]
-        (is (ensure-invariants conn transfer-transaction)))
+             [:db.fn/call + 3 :account/balance  -1]
+             [:db.fn/call + 1 :account/balance -50]
+             [:db.fn/call + 2 :account/balance +52]
+             [:db.fn/call + 3 :account/balance  -2]
+             [:db.fn/call + 4 :account/balance  +1]]]
+        (is (assert-invariants conn transfer-transaction)))
 
 
       ;; test non-zero balance change
@@ -178,13 +179,13 @@
             invalid-transaction
             [[:db/add tid :transaction/signed-by 1]
              [:db/add tid :transaction/signed-by 3]
-             [:db.fn/call +v 2 :account/balance +52]
-             [:db.fn/call +v 3 :account/balance  -2]
-             [:db.fn/call +v 4 :account/balance  +1]]]
+             [:db.fn/call + 2 :account/balance +52]
+             [:db.fn/call + 3 :account/balance  -2]
+             [:db.fn/call + 4 :account/balance  +1]]]
         (is (= {:type :invariant/invariant-mismatch,
                 :attribute :account/balance}
                (try
-                 (ensure-invariants conn invalid-transaction)
+                 (assert-invariants conn invalid-transaction)
                  (catch Exception e
                    (select-keys (ex-data e) #{:type :attribute}))))))
 
@@ -193,12 +194,12 @@
             invalid-transaction
             [[:db/add tid :transaction/signed-by 1]
              [:db/add tid :transaction/signed-by 3]
-             [:db.fn/call +v 2 :account/balance +5000]
-             [:db.fn/call +v 3 :account/balance -5000]]]
+             [:db.fn/call + 2 :account/balance +5000]
+             [:db.fn/call + 3 :account/balance -5000]]]
         (is (= {:type :invariant/invariant-mismatch,
                 :attribute :account/balance}
                (try
-                 (ensure-invariants conn invalid-transaction)
+                 (assert-invariants conn invalid-transaction)
                  (catch Exception e
                    (select-keys (ex-data e) #{:type :attribute})))))))))
 

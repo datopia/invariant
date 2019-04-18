@@ -1,6 +1,6 @@
 (ns invariant.transaction
-  (:require [datahike.db :as ddb]
-            [datahike.arrays :as da]))
+  "WIP, supposed to support datomic/datahike map transaction syntax."
+  (:require [datahike.db :as ddb]))
 
 
 (defn maybe-wrap-multival [a vs]
@@ -11,7 +11,7 @@
     [vs]
 
     ;; not a collection at all, so definitely a single value
-    (not (or (da/array? vs)
+    (not (or #_(da/array? vs)
              (and (coll? vs) (not (map? vs)))))
     [vs]
 

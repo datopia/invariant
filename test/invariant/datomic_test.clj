@@ -1,12 +1,15 @@
 (ns invariant.datomic-test
+  (:refer-clojure :exclude [+])
   (:require [clojure.test :refer [deftest testing is] :as test]
             [invariant.datomic :refer :all]
-            [datomic.api :as d]))
+            [datomic.api :as d]
+            [clojure.java.io :as io]))
 
 
 (deftest unnest-query-test
   (is (= '(datomic.api/q '[:find ?matches .
-                           :in $before $after $empty-with-txs $tx-ops [[?sum-before ?sum-after ?sum-change] ...]
+                          :in $before $after $empty-with-txs $tx-ops
+                          [[?sum-before ?sum-after ?sum-change] ...]
                           :where
                           [(= ?sum-before ?sum-after)]
                           [(= ?sum-change 0) ?matches]]
@@ -37,73 +40,45 @@
                          [(= ?sum-change 0) ?matches]]
                        '[$before $after $empty-with-txs $tx-ops]))))
 
+
 (def ^:dynamic conn nil)
 
-
-(def schema [{:db/id #db/id[:db.part/db]
-              :db/ident :invariant/rule
-              :db/valueType :db.type/keyword
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :invariant/query
-              :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :account/name
-              :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :account/balance
-              :db/valueType :db.type/bigdec
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :account/unit
-              :db/valueType :db.type/keyword
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :transaction/signed-by
-              :db/valueType :db.type/long
-              :db/cardinality :db.cardinality/many
-              :db.install/_attribute :db.part/db}])
-
+(def schema (read-string
+             (slurp
+              (io/resource "datomic_schema.edn"))))
 
 (defn datomic-db-fixture [f]
   (let [uri "datomic:mem:///invariant-test"
-        _ (d/create-database uri)
-        example-txs [{:db/id 1,
-                      :account/name "Moe",
-                      :account/balance 5000M,
-                      :account/unit :datom}
-                     {:db/id 2,
-                      :account/name "Christian",
-                      :account/balance 100M,
-                      :account/unit :datom}
-                     {:db/id 3,
-                      :account/name "Danny",
-                      :account/balance 3000M,
-                      :account/unit :datom}]]
-
+        example-txs [#:account{:db/id 1,
+                               :name "Moe",
+                               :balance 5000M,
+                               :unit :datom}
+                     #:account{:db/id 2,
+                               :name "Christian",
+                               :balance 100M,
+                               :unit :datom}
+                     #:account{:db/id 3,
+                               :name "Danny",
+                               :balance 3000M,
+                               :unit :datom}]]
+    (d/create-database uri)
     (binding [conn (d/connect uri)]
       @(d/transact conn schema) 
-      @(d/transact conn [{:db/id #db/id[:db.part/db]
-                          :db/ident :invariant/query-test
-                          :db/valueType :db.type/string
-                          :db/cardinality :db.cardinality/one
-                          :invariant/query "[:find ...]"
-                          :db.install/_attribute :db.part/db}])
+      @(d/transact conn [#:db{:id #db/id[:db.part/db]
+                              :ident :invariant/query-test
+                              :valueType :db.type/string
+                              :cardinality :db.cardinality/one
+                              :invariant/query "[:find ...]"
+                              :db.install/_attribute :db.part/db}])
       @(d/transact conn example-txs)
-      @(d/transact conn [{:db/id (d/tempid :db.part/user)
-                          :db/ident :+v
-                          :db/fn (d/function {:lang "clojure"
-                                              :params '[db eid attr delta]
-                                              :code '(let [m (d/pull db [attr] eid)
-                                                           v (attr m 0M)]
-                                                       [[:db/add eid attr (+ v delta)]])})}])
+      @(d/transact conn [#:db{:id (d/tempid :db.part/user)
+                              :ident :+
+                              :fn (d/function
+                                   {:lang "clojure"
+                                    :params '[db eid attr delta]
+                                    :code '(let [m (d/pull db [attr] eid)
+                                                 v (attr m 0M)]
+                                             [[:db/add eid attr (+ v delta)]])})}])
       (f)
       (d/delete-database uri))))
 
@@ -150,7 +125,7 @@
                                                        #datahike.parser.Constant{:value 2}
                                                        #datahike.parser.Constant{:value 3}]}}
              (try
-               (ensure-invariants conn schema invariant-txs)
+               (assert-invariants conn schema invariant-txs)
                (catch Exception e
                  (ex-data e))))))))
 
@@ -189,7 +164,7 @@
                        [[?sum-before ?sum-after ?sum-change]]]
                       [(= ?sum-before ?sum-after)]
                       [(= ?sum-change 0M) ?matches]])]]]
-      (is (ensure-invariants conn schema invariant-txs))
+      (is (assert-invariants conn schema invariant-txs))
       ;; install them
       @(d/transact conn invariant-txs)
 
@@ -198,11 +173,11 @@
             transfer-transaction
             [[:db/add tid :transaction/signed-by 1]
              [:db/add tid :transaction/signed-by 3]
-             [:+v 0 :account/balance  +1]
-             [:+v 3 :account/balance  -3]
-             [:+v 1 :account/balance -50]
-             [:+v 2 :account/balance +52]]]
-        (is (ensure-invariants conn schema transfer-transaction)))
+             [:+ 0 :account/balance  +1]
+             [:+ 3 :account/balance  -3]
+             [:+ 1 :account/balance -50]
+             [:+ 2 :account/balance +52]]]
+        (is (assert-invariants conn schema transfer-transaction)))
 
 
       ;; test non-zero balance change
@@ -210,13 +185,13 @@
             invalid-transaction
             [[:db/add tid :transaction/signed-by 1]
              [:db/add tid :transaction/signed-by 3]
-             [:+v 0 :account/balance  +1]
-             [:+v 2 :account/balance +52]
-             [:+v 3 :account/balance  -2]]]
+             [:+ 0 :account/balance  +1]
+             [:+ 2 :account/balance +52]
+             [:+ 3 :account/balance  -2]]]
         (is (= {:type :invariant/invariant-mismatch,
                 :attribute :account/balance}
                (try
-                 (ensure-invariants conn schema invalid-transaction)
+                 (assert-invariants conn schema invalid-transaction)
                  (catch Exception e
                    (select-keys (ex-data e) #{:type :attribute}))))))
 
@@ -225,16 +200,13 @@
             invalid-transaction
             [[:db/add tid :transaction/signed-by 1]
              [:db/add tid :transaction/signed-by 3]
-             [:+v 2 :account/balance +5000]
-             [:+v 3 :account/balance -5000]]]
+             [:+ 2 :account/balance +5000]
+             [:+ 3 :account/balance -5000]]]
         (is (= {:type :invariant/invariant-mismatch,
                 :attribute :account/balance}
                (try
-                 (ensure-invariants conn schema invalid-transaction)
+                 (assert-invariants conn schema invalid-transaction)
                  (catch Exception e
                    (select-keys (ex-data e) #{:type :attribute})))))))))
-
-
-
 
 
