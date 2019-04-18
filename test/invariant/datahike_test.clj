@@ -3,7 +3,8 @@
   (:require [clojure.test :refer [deftest testing is] :as test]
             [invariant.datahike :refer :all]
             [invariant.query :refer [assert-valid-query]]
-            [datahike.api :as d]))
+            [datahike.api :as d]
+            [clojure.java.io :as io]))
 
 
 (deftest attribute-test
@@ -34,36 +35,13 @@
             (catch Exception e
               (ex-data e)))))))
 
+(def schema (read-string
+             (slurp
+              (io/resource "datahike_schema.edn"))))
 
-
-
-(def schema
-  {:account/balance #:db{:cardinality :db.cardinality/one},
-   :voting/to #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
-   :transfer/unit #:db{:cardinality :db.cardinality/one},
-   :voting/from #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
-   :transfer/amount #:db{:cardinality :db.cardinality/one},
-   :account/unit #:db{:cardinality :db.cardinality/one},
-   :transfer/to #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
-   :transfer/from #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
-   :voting/delegate #:db{:valueType :db.type/ref,
-                         :cardinality :db.cardinality/one},
-   :block/height #:db{:cardinality :db.cardinality/one},
-   :account/name #:db{:cardinality :db.cardinality/one,
-                      :unique :db.unique/identity}})
-
-(def example-txs [{:db/id 1,
-                   :account/name "Moe",
-                   :account/balance 5000M,
-                   :account/unit :datom}
-                  {:db/id 2,
-                   :account/name "Christian",
-                   :account/balance 100M,
-                   :account/unit :datom}
-                  {:db/id 3,
-                   :account/name "Danny",
-                   :account/balance 3000M,
-                   :account/unit :datom}])
+(def example-txs (read-string
+                  (slurp
+                   (io/resource "example_txs.edn"))))
 
 (def ^:dynamic conn nil)
 

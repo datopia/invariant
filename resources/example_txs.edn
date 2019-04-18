@@ -1,0 +1,12 @@
+[#:account{:db/id 1,
+           :name "Moe",
+           :balance 5000M,
+           :unit :datom}
+ #:account{:db/id 2,
+           :name "Christian",
+           :balance 100M,
+           :unit :datom}
+ #:account{:db/id 3,
+           :name "Danny",
+           :balance 3000M,
+           :unit :datom}]

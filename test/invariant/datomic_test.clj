@@ -47,20 +47,12 @@
              (slurp
               (io/resource "datomic_schema.edn"))))
 
+(def example-txs (read-string
+                  (slurp
+                   (io/resource "example_txs.edn"))))
+
 (defn datomic-db-fixture [f]
-  (let [uri "datomic:mem:///invariant-test"
-        example-txs [#:account{:db/id 1,
-                               :name "Moe",
-                               :balance 5000M,
-                               :unit :datom}
-                     #:account{:db/id 2,
-                               :name "Christian",
-                               :balance 100M,
-                               :unit :datom}
-                     #:account{:db/id 3,
-                               :name "Danny",
-                               :balance 3000M,
-                               :unit :datom}]]
+  (let [uri "datomic:mem:///invariant-test"]
     (d/create-database uri)
     (binding [conn (d/connect uri)]
       @(d/transact conn schema) 
