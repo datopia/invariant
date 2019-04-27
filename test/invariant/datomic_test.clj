@@ -5,7 +5,6 @@
             [datomic.api :as d]
             [clojure.java.io :as io]))
 
-
 (deftest unnest-query-test
   (is (= '(datomic.api/q '[:find ?matches .
                           :in $before $after $empty-with-txs $tx-ops
@@ -55,7 +54,7 @@
   (let [uri "datomic:mem:///invariant-test"]
     (d/create-database uri)
     (binding [conn (d/connect uri)]
-      @(d/transact conn schema) 
+      @(d/transact conn schema)
       @(d/transact conn [#:db{:id #db/id[:db.part/db]
                               :ident :invariant/query-test
                               :valueType :db.type/string
@@ -121,10 +120,9 @@
                (catch Exception e
                  (ex-data e))))))))
 
-
 (deftest invariant-deployment
   (testing "Testing deployment of valid invariant."
-    (let [tid (d/tempid :db.part/user) 
+    (let [tid (d/tempid :db.part/user)
           invariant-txs
           [[:db/add tid :invariant/rule :account/balance]
            [:db/add tid :invariant/query
@@ -200,5 +198,3 @@
                  (assert-invariants conn schema invalid-transaction)
                  (catch Exception e
                    (select-keys (ex-data e) #{:type :attribute})))))))))
-
-

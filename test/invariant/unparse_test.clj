@@ -3,7 +3,6 @@
             [datahike.parser :refer [parse-query]]
             [clojure.test :refer [deftest testing is] :as test]))
 
-
 (deftest unparse-test
   (testing "Datahike query unparsing."
     (is (= '[:find (sum ?balance-before)
@@ -24,8 +23,3 @@
                                           :where
                                           [(= ?balance-before 42)]]
                                          $before $after $txn $txs)]]))))))
-
-
-
-
-

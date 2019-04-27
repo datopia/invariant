@@ -23,8 +23,6 @@
   [[_ e a v]]
   a)
 
-
-
 (defn unnest-deep-queries [[_ [_ query] & sources]]
   (let [res (p/parse-query query)
         clean-clauses (->> (:qwhere res)
@@ -108,11 +106,3 @@
 (defmethod invariant.core/invariant :datomic
   [connection schema tx-data]
   (assert-invariants connection schema tx-data))
-
-
-
-
-
-
-
-

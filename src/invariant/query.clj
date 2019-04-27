@@ -2,13 +2,11 @@
   (:require [datahike.parser :as p]
             [datahike.query]))
 
-
 (def invariant-query '[:find ?q .
                        :in $ ?a
                        :where
                        [?e :invariant/rule ?a]
                        [?e :invariant/query ?q]])
-
 
 (def ^:dynamic *allowed-fns*
   (into #{'subquery} (keys datahike.query/built-ins)))
@@ -35,6 +33,3 @@
         (throw (ex-info "Function not allowed."
                         {:type :invariant/invalid-function-call
                          :call c}))))))
-
-
-

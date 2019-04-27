@@ -9,14 +9,12 @@
                                      invariant-query]]
             [clojure.edn :as edn]))
 
-
 (alter-var-root #'dq/built-ins (fn [old] (conj old ['subquery datahike.api/q])))
 
 (defn + [db eid attr delta]
   (let [m (d/pull db [attr] eid)
         v (attr m 0)]
     [[:db/add eid attr (clojure.core/+ v delta)]]))
-
 
 (defn get-attribute-dispatch [v]
   (let [[a b] v]
@@ -33,7 +31,6 @@
 (defmethod get-attribute :db/add
   [[_ e a v]]
   a)
-
 
 (defn assert-invariants [connection tx-data]
   (let [attribute-txs (map (fn [tx] [(get-attribute tx) tx])

@@ -2,7 +2,6 @@
   "WIP, supposed to support datomic/datahike map transaction syntax."
   (:require [datahike.db :as ddb]))
 
-
 (defn maybe-wrap-multival [a vs]
   (cond
     ;; not a multival context
@@ -20,8 +19,7 @@
          #_(is-attr? db (first vs) :db.unique/identity))
     [vs]
 
-    :else vs)) 
-
+    :else vs))
 
 (defn explode [entity]
   (let [eid (:db/id entity)]
@@ -36,16 +34,16 @@
           [:db/add v   straight-a eid]
           [:db/add eid straight-a v])))))
 
-
-(mapcat explode [{:db/id 1,
-                  :account/name "Moe",
-                  :account/balance 5000M,
-                  :account/unit :datom}
-                 {:db/id 2,
-                  :account/name "Christian",
-                  :account/balance 100M,
-                  :account/unit :datom}
-                 {:db/id 3,
-                  :account/name "Danny",
-                  :account/balance 3000M,
-                  :account/unit :datom}])
+(comment
+  (mapcat explode [{:db/id 1,
+                    :account/name "Moe",
+                    :account/balance 5000M,
+                    :account/unit :datom}
+                   {:db/id 2,
+                   :account/name "Christian",
+                    :account/balance 100M,
+                    :account/unit :datom}
+                   {:db/id 3,
+                    :account/name "Danny",
+                    :account/balance 3000M,
+                    :account/unit :datom}]))

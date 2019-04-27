@@ -6,7 +6,6 @@
             [datahike.api :as d]
             [clojure.java.io :as io]))
 
-
 (deftest attribute-test
   (testing "Attribute extraction."
     (is (= :foo
@@ -14,7 +13,6 @@
 
     (is (= :foo
            (get-attribute [:db.fn/call invariant.datahike/+ 1 :foo 3])))))
-
 
 (deftest valid-query-test
   (testing "Valid queries."
@@ -31,7 +29,7 @@
                                               :in $a $b $c $d
                                               :where
                                               [(nested-evil ?a 5)]]
-                                             $a $b $c $d) ?a]]) 
+                                             $a $b $c $d) ?a]])
             (catch Exception e
               (ex-data e)))))))
 
@@ -103,7 +101,7 @@
 
 (deftest invariant-deployment
   (testing "Testing deployment of valid invariant."
-    (let [tid (d/tempid 1) 
+    (let [tid (d/tempid 1)
           invariant-txs
           [[:db/add tid :invariant/rule :account/balance]
            [:db/add tid :invariant/query
@@ -151,7 +149,6 @@
              [:db.fn/call + 4 :account/balance  +1]]]
         (is (assert-invariants conn transfer-transaction)))
 
-
       ;; test non-zero balance change
       (let [tid (d/tempid -1)
             invalid-transaction
@@ -180,7 +177,3 @@
                  (assert-invariants conn invalid-transaction)
                  (catch Exception e
                    (select-keys (ex-data e) #{:type :attribute})))))))))
-
-
-
-
