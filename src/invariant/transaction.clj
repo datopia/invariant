@@ -40,7 +40,7 @@
                     :account/balance 5000M,
                     :account/unit :datom}
                    {:db/id 2,
-                   :account/name "Christian",
+                    :account/name "Christian",
                     :account/balance 100M,
                     :account/unit :datom}
                    {:db/id 3,

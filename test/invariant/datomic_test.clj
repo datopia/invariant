@@ -7,20 +7,20 @@
 
 (deftest unnest-query-test
   (is (= '(datomic.api/q '[:find ?matches .
-                          :in $before $after $empty-with-txs $tx-ops
-                          [[?sum-before ?sum-after ?sum-change] ...]
-                          :where
-                          [(= ?sum-before ?sum-after)]
-                          [(= ?sum-change 0) ?matches]]
+                           :in $before $after $empty-with-txs $tx-ops
+                           [[?sum-before ?sum-after ?sum-change] ...]
+                           :where
+                           [(= ?sum-before ?sum-after)]
+                           [(= ?sum-change 0) ?matches]]
                          $before $after $empty-with-txs $tx-ops
                          (datomic.api/q '[:find (sum ?balance-before)
-                                         :in $before $after $empty-with-txs $tx-ops ?sum
-                                         :where [(= ?balance-before 42)]]
+                                          :in $before $after $empty-with-txs $tx-ops ?sum
+                                          :where [(= ?balance-before 42)]]
                                         $before $after $empty-with-txs $tx-ops
                                         (datomic.api/q '[:find (sum ?balance-before)
-                                                        :in $before $after $empty-with-txs $tx-ops
-                                                        :where [(= ?balance-before 45)]]
-                                                      $before $after $empty-with-txs $tx-ops)))
+                                                         :in $before $after $empty-with-txs $tx-ops
+                                                         :where [(= ?balance-before 45)]]
+                                                       $before $after $empty-with-txs $tx-ops)))
          (unnest-query '[:find ?matches .
                          :in $before $after $empty-with-txs $tx-ops
                          :where
@@ -105,7 +105,7 @@
                                   ;; 3. Sender spending
                                   #_[$txn    _                 :transaction/signed-by ?sender]
                                   #_[(datopia.attribute-invariants/balance-check
-                                     ?sender ?affected-entity ?balance-before ?balance-after)]]
+                                      ?sender ?affected-entity ?balance-before ?balance-after)]]
                                  $before $after $txn $txs)
                        [[?sum-before ?sum-after ?sum-change]]]
                       [(= ?sum-before ?sum-after)]
@@ -149,7 +149,7 @@
                                   ;; 3. Sender spending
                                   #_[$txn    _                 :transaction/signed-by ?sender]
                                   #_[(datopia.attribute-invariants/balance-check
-                                     ?sender ?affected-entity ?balance-before ?balance-after)]]
+                                      ?sender ?affected-entity ?balance-before ?balance-after)]]
                                  $before $after $empty+txs $txs)
                        [[?sum-before ?sum-after ?sum-change]]]
                       [(= ?sum-before ?sum-after)]

@@ -14,7 +14,7 @@
                     :where
                     [(= ?balance-before 42)]]
                    $before $after $txn $txs)]]
-         (unparse (parse-query '[:find (sum ?balance-before)
+           (unparse (parse-query '[:find (sum ?balance-before)
                                    :in $before $after $txn $txs
                                    :where
                                    [(= ?balance-before 42)]

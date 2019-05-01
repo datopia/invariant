@@ -26,21 +26,21 @@
 (defn unnest-deep-queries [[_ [_ query] & sources]]
   (let [res (p/parse-query query)
         clean-clauses (->> (:qwhere res)
-                         (filter (fn [f] (not= (:symbol (:fn f)) 'subquery)))
-                         vec)
+                           (filter (fn [f] (not= (:symbol (:fn f)) 'subquery)))
+                           vec)
         nested-functions (->> (:qwhere res)
-                            (filter (fn [c]
-                                      (let [t (type c)]
-                                        (= datahike.parser.Function t))))
-                            (filter (fn [f] (= (:symbol (:fn f)) 'subquery))))]
+                              (filter (fn [c]
+                                        (let [t (type c)]
+                                          (= datahike.parser.Function t))))
+                              (filter (fn [f] (= (:symbol (:fn f)) 'subquery))))]
     (concat
      (list 'datomic.api/q
            (list 'quote
                  (unparse
                   (-> res
-                     (assoc :qwhere clean-clauses)
-                     (update :qin concat
-                             (map :binding nested-functions))))))
+                      (assoc :qwhere clean-clauses)
+                      (update :qin concat
+                              (map :binding nested-functions))))))
      sources
      (map (comp unnest-deep-queries
                 ;; subquery first argument

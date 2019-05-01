@@ -17,21 +17,21 @@
 (deftest valid-query-test
   (testing "Valid queries."
     (is (= '{:type :invariant/invalid-function-call,
-            :call #datahike.parser.Predicate{:fn #datahike.parser.PlainSymbol{:symbol nested-evil},
-                                             :args [#datahike.parser.Variable{:symbol ?a}
-                                                    #datahike.parser.Constant{:value 5}]}}
+             :call #datahike.parser.Predicate{:fn #datahike.parser.PlainSymbol{:symbol nested-evil},
+                                              :args [#datahike.parser.Variable{:symbol ?a}
+                                                     #datahike.parser.Constant{:value 5}]}}
 
            (try
-            (assert-valid-query '[:find ?a
-                                  :in $a $b $c $d
-                                  :where
-                                  [(subquery [:find ?a
-                                              :in $a $b $c $d
-                                              :where
-                                              [(nested-evil ?a 5)]]
-                                             $a $b $c $d) ?a]])
-            (catch Exception e
-              (ex-data e)))))))
+             (assert-valid-query '[:find ?a
+                                   :in $a $b $c $d
+                                   :where
+                                   [(subquery [:find ?a
+                                               :in $a $b $c $d
+                                               :where
+                                               [(nested-evil ?a 5)]]
+                                              $a $b $c $d) ?a]])
+             (catch Exception e
+               (ex-data e)))))))
 
 (def schema (read-string
              (slurp
@@ -83,7 +83,7 @@
                                   ;; 3. Sender spending
                                   #_[$txn    _                 :transaction/signed-by ?sender]
                                   #_[(datopia.attribute-invariants/balance-check
-                                     ?sender ?affected-entity ?balance-before ?balance-after)]]
+                                      ?sender ?affected-entity ?balance-before ?balance-after)]]
                                  $before $after $txn $txs)
                        [[?sum-before ?sum-after ?sum-change]]]
                       [(= ?sum-before ?sum-after)]
@@ -128,7 +128,7 @@
                                   ;; 3. Sender spending
                                   #_[$txn    _                 :transaction/signed-by ?sender]
                                   #_[(datopia.attribute-invariants/balance-check
-                                     ?sender ?affected-entity ?balance-before ?balance-after)]]
+                                      ?sender ?affected-entity ?balance-before ?balance-after)]]
                                  $before $after $empty+txs $txs)
                        [[?sum-before ?sum-after ?sum-change]]]
                       [(= ?sum-before ?sum-after)]
