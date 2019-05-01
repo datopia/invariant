@@ -7,5 +7,5 @@
                  [org.clojure/tools.reader "1.3.2"]
                  [io.replikativ/datahike   "0.2.0-beta"]]
   :plugins      [[lein-marginalia "0.9.1"]]
-  :profiles     {:dev {:dependencies
-                       [[com.datomic/datomic-free "0.9.5697"]]}})
+  :profiles     {:dev {:dependencies [[com.datomic/datomic-free "0.9.5697"]]
+                       :source-paths ["test-support"]}})

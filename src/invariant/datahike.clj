@@ -18,9 +18,8 @@
 
 (defn get-attribute-dispatch [v]
   (let [[a b] v]
-    (cond (= :db.fn/call a)
-          [:db.fn/call b]
-          :else a)))
+    (cond (= :db.fn/call a) [:db.fn/call b]
+          :else             a)))
 
 (defmulti get-attribute get-attribute-dispatch)
 
@@ -33,13 +32,13 @@
   a)
 
 (defn assert-invariants [connection tx-data]
-  (let [attribute-txs (map (fn [tx] [(get-attribute tx) tx])
-                           tx-data)
-        attributes (distinct (map first attribute-txs))
-        schema (:schema @connection)]
+  (let [attribute-txs (for [tx tx-data]
+                        [(get-attribute tx) tx])
+        attributes    (distinct (map first attribute-txs))
+        schema        (:schema @connection)]
     (doseq [[a tx] attribute-txs
             :when (= a :invariant/query)
-            :let [[_ _ _ v] tx]]
+            :let  [[_ _ _ v] tx]]
       (assert-valid-query (edn/read-string v)))
 
     (doseq [a attributes]

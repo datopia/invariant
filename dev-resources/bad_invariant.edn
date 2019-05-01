@@ -1,0 +1,29 @@
+[:find ?matches .
+ :in $before $after $txn $txs
+ :where
+ ;; run the sub-query
+ [(subquery [:find (sum ?balance-before) (sum ?balance-after) (sum ?balance-change)
+             :with ?affected-entity
+             :in $before $after $txn $txs
+             :where
+             [(evil-haha 1 2 3)]
+             ;; Unify data from databases and transactions with affected-entity
+             [$after    ?affected-entity         :account/balance    ?balance-after]
+             [$txn      ?affected-entity         :account/balance    ?balance-change]
+             [(get-else $before ?affected-entity :account/balance 0) ?balance-before]
+
+             ;; 1. Zero-Sum
+             [(+ ?balance-change ?balance-before) ?computed-balance-after]
+             [(= ?balance-after ?computed-balance-after)]
+
+             ;; 2. Positivity
+             [(>= ?balance-after 0)]
+
+             ;; 3. Sender spending
+             #_[$txn    _                 :transaction/signed-by ?sender]
+             #_[(datopia.attribute-invariants/balance-check
+                 ?sender ?affected-entity ?balance-before ?balance-after)]]
+            $before $after $txn $txs)
+  [[?sum-before ?sum-after ?sum-change]]]
+ [(= ?sum-before ?sum-after)]
+ [(= ?sum-change 0) ?matches]])]]]
