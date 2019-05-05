@@ -45,7 +45,7 @@
 (def backend
   (reify backend/Backend
     (tempid [_ v]
-      (d/tempid (if (keyword? v) 1 v)))
+      (d/tempid v))
     (unnest-query [_ q sources]
       nil)
     (assert-invariants [_ txs]

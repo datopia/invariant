@@ -2,7 +2,7 @@
   "WIP, supposed to support datomic/datahike map transaction syntax."
   (:require [datahike.db :as ddb]))
 
-(defn maybe-wrap-multival [a vs]
+(defn- maybe-wrap-multival [a vs]
   (cond
     ;; not a multival context
     (not (or (ddb/reverse-ref? a)
@@ -21,7 +21,7 @@
 
     :else vs))
 
-(defn explode [entity]
+(defn- explode [entity]
   (let [eid (:db/id entity)]
     (for [[a vs] entity
           :when  (not= a :db/id)

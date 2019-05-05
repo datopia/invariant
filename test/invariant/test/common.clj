@@ -6,52 +6,55 @@
 
 (def example-txs (read-resource "example_txs.edn"))
 
-(let [unnested '(QUERY-SYM
-                 '[:find ?matches .
-                   :in   $before $after $empty-with-txs $tx-ops
-                   [[?sum-before ?sum-after ?sum-change] ...]
-                   :where
-                   [(= ?sum-before ?sum-after)]
-                   [(= ?sum-change 0) ?matches]]
-                 $before $after $empty-with-txs $tx-ops
-                 (QUERY-SYM
-                  '[:find  (sum ?balance-before)
-                    :in    $before $after $empty-with-txs $tx-ops ?sum
-                    :where [(= ?balance-before 42)]]
-                  $before $after $empty-with-txs $tx-ops
-                  (QUERY-SYM
-                   '[:find  (sum ?balance-before)
-                     :in    $before $after $empty-with-txs $tx-ops
-                     :where [(= ?balance-before 45)]]
-                   $before $after $empty-with-txs $tx-ops)))]
-  (defn unnesting? [backend fn-sym]
-    (= (prewalk-replace {'QUERY-SYM fn-sym} unnested)
-       (backend/unnest-query
-        backend
-        '[:find ?matches .
-          :in   $before $after $empty-with-txs $tx-ops
-          :where
-          [(subquery
-            [:find (sum ?balance-before)
-             :in   $before $after $empty-with-txs $tx-ops
-             :where
-             [(= ?balance-before 42)]
-             [(subquery [:find  (sum ?balance-before)
-                         :in    $before $after $empty-with-txs $tx-ops
-                         :where [(= ?balance-before 45)]]
-                        $before $after $empty-with-txs $tx-ops) ?sum]]
-            $before $after $empty-with-txs $tx-ops)
-           [[?sum-before ?sum-after ?sum-change]]]
-          [(= ?sum-before ?sum-after)]
-          [(= ?sum-change 0) ?matches]]
-        '[$before $after $empty-with-txs $tx-ops]))))
+(def unnested-query
+  '(QUERY-SYM
+    '[:find ?matches .
+      :in   $before $after $empty-with-txs $tx-ops
+      [[?sum-before ?sum-after ?sum-change] ...]
+      :where
+      [(= ?sum-before ?sum-after)]
+      [(= ?sum-change 0) ?matches]]
+    $before $after $empty-with-txs $tx-ops
+    (QUERY-SYM
+     '[:find  (sum ?balance-before)
+       :in    $before $after $empty-with-txs $tx-ops ?sum
+       :where [(= ?balance-before 42)]]
+     $before $after $empty-with-txs $tx-ops
+     (QUERY-SYM
+      '[:find  (sum ?balance-before)
+        :in    $before $after $empty-with-txs $tx-ops
+        :where [(= ?balance-before 45)]]
+      $before $after $empty-with-txs $tx-ops))))
+
+(def nested-query
+  '[:find ?matches .
+    :in   $before $after $empty-with-txs $tx-ops
+    :where
+    [(subquery
+      [:find (sum ?balance-before)
+       :in   $before $after $empty-with-txs $tx-ops
+       :where
+       [(= ?balance-before 42)]
+       [(subquery [:find  (sum ?balance-before)
+                   :in    $before $after $empty-with-txs $tx-ops
+                   :where [(= ?balance-before 45)]]
+                  $before $after $empty-with-txs $tx-ops) ?sum]]
+      $before $after $empty-with-txs $tx-ops)
+     [[?sum-before ?sum-after ?sum-change]]]
+    [(= ?sum-before ?sum-after)]
+    [(= ?sum-change 0) ?matches]])
+
+(defn unnesting? [backend fn-sym]
+  (= (prewalk-replace {'QUERY-SYM fn-sym} unnested-query)
+     (backend/unnest-query
+      backend nested-query
+      '[$before $after $empty-with-txs $tx-ops])))
 
 (let [bad-invariant (read-resource "bad_invariant.edn")]
   (defn bad-invariant-deployment? [backend]
     (let [tid (backend/tempid backend -1)
-          txn [[:db/add tid :invariant/rule :account/balance]
-               [:db/add tid :invariant/query
-                (pr-str bad-invariant)]]]
+          txn [[:db/add tid :invariant/rule  :account/balance]
+               [:db/add tid :invariant/query (pr-str bad-invariant)]]]
       (= '{:type :invariant/invalid-function-call,
            :call #datahike.parser.Predicate
            {:fn #datahike.parser.PlainSymbol{:symbol evil-haha},
