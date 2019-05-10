@@ -1,6 +1,5 @@
 (ns invariant.core)
 
-
 (defn invariant-dispatch [connection _ _]
   (cond (and (:schema connection)
              (:rschema connection))
@@ -10,4 +9,3 @@
         :datomic))
 
 (defmulti invariant invariant-dispatch)
-

@@ -1,9 +1,8 @@
 (ns invariant.unparse
   (:require [datahike.parser :as parser])
-  (:import [datahike.parser
-            PlainSymbol Constant SrcVar Aggregate
-            Query FindScalar FindRel Pattern
-            Variable BindScalar Predicate Function BindColl BindTuple]))
+  (:import  [datahike.parser
+             PlainSymbol Constant SrcVar Aggregate Query FindScalar FindRel
+             Pattern Variable BindScalar Predicate Function BindColl BindTuple]))
 
 ;; inverse to p/parse-query
 (defmulti unparse type)
