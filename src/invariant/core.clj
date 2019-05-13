@@ -1,7 +1,6 @@
 (ns invariant.core)
 
-
-(defn invariant-dispatch [connection _]
+(defn invariant-dispatch [connection _ _]
   (cond (and (:schema connection)
              (:rschema connection))
         :datahike
@@ -10,4 +9,3 @@
         :datomic))
 
 (defmulti invariant invariant-dispatch)
-

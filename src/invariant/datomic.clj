@@ -1,207 +1,109 @@
 (ns invariant.datomic
-  (:require [datomic.api :as api]
-            [clojure.java.io :as io]))
+  (:refer-clojure :exclude [+])
+  (:require [datomic.api     :as api]
+            [datahike.parser :as p]
+            [clojure.edn     :as edn]
+            [invariant.core]
+            [invariant.query
+             :refer [assert-valid-query invariant-query]]
+            [invariant.unparse :refer [unparse]]))
 
-;; TODO
-;; cache create empty DB with schema
+(defn get-attribute-dispatch [v]
+  (first v))
 
+(defmulti get-attribute get-attribute-dispatch)
 
-(comment
-  (def uri "datomic:mem:///datopia-transfer-example")
+(defmethod get-attribute :+
+  [[_ eid attr delta]]
+  attr)
 
-(def schema (-> "schema.edn"
-                io/resource
-                slurp
-                read-string))
+(defmethod get-attribute :db/add
+  [[_ e a v]]
+  a)
 
-(try
-  ;; initialize database
-  (api/create-database uri)
-  (catch Exception e
-    (prn e)))
+(let [subq-selector (comp #{'subquery} :symbol :fn)
+      fn-selector   (comp #{datahike.parser.Function} type)]
+  (defn unnest-deep-queries [[_ [_ query] & sources]]
+    (let [res              (p/parse-query query)
+          clean-clauses    (remove subq-selector (:qwhere res))
+          nested-functions (->> (:qwhere res)
+                                (filter fn-selector)
+                                (filter subq-selector))]
+            (concat
+             (list 'datomic.api/q
+                   (list 'quote
+                         (unparse
+                          (-> res
+                              (assoc :qwhere clean-clauses)
+                              (update :qin concat
+                                      (map :binding nested-functions))))))
+             sources
+             (map (comp unnest-deep-queries
+                        ;; subquery first argument
+                        #(concat (list 'api/q (list 'quote (second %))) sources)
+                        first
+                        unparse)
+                  nested-functions)))))
 
-(api/delete-database uri)
+(defn unnest-query [query sources]
+  (unnest-deep-queries (concat ['_ (list 'quote query)] sources)))
 
-(def conn (api/connect uri))
-
-
-
-(def example-txs [{:db/id 1,
-                   :account/name "Moe",
-                   :account/balance 5000M,
-                   :account/unit :datom}
-                  {:db/id 2,
-                   :account/name "Christian",
-                   :account/balance 100M,
-                   :account/unit :datom}
-                  {:db/id 3,
-                   :account/name "Danny",
-                   :account/balance 3000M,
-                   :account/unit :datom}])
-
-(def schema [{:db/id #db/id[:db.part/db]
-              :db/ident :invariant/rule
-              :db/valueType :db.type/keyword
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :invariant/query
-              :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :account/name
-              :db/valueType :db.type/string
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :account/balance
-              :db/valueType :db.type/bigdec
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}
-             {:db/id #db/id[:db.part/db]
-              :db/ident :account/unit
-              :db/valueType :db.type/keyword
-              :db/cardinality :db.cardinality/one
-              :db.install/_attribute :db.part/db}])
-
-@(api/transact conn schema)
-
-@(api/transact conn example-txs)
-
-(let [counter (atom 0)]
-  (defn datomic-empty-db [schema]
-    (let [uri (str "datomic:mem:///temp-invariant-" (swap! counter inc))
-          _ (api/create-database uri)
-          conn (api/connect uri)]
-      @(api/transact conn schema)
-      @(api/transact conn [{:db/id (api/tempid :db.part/user)
-                           :db/ident :+v
-                           :db/fn (api/function {:lang "clojure"
-                                                 :params '[db _ attr eid delta]
-                                                 :code '(let [m (d/pull db [attr] eid)
-                                                              v (attr m 0M)]
-                                                          [[:db/add eid attr (+ v delta)]])})}])
-      (api/db conn)
-      )))
-
-
-(defn ensure-invariances-datomic [connection schema tx-data]
-  ;; TODO explode map representations temporarily
-  ;; TODO properly handle db.call
-  (let [invariant-attributes (filter (fn [[_ e a v]]
-                                       (= a :invariant/query))
-                                     tx-data)
-        attributes (disj (into #{} (map (fn [[_ _ a _]] a) tx-data))
-                         :invariant/rule)]
-    (prn "matching attributes" attributes)
-    (doseq [[_ e a v] invariant-attributes]
-      (valid-query? (edn/read-string v)))
-
-    (doseq [a (seq attributes)]
-      ;; TODO cache
-      (when-let [inv-qs (api/q '[:find ?q .
-                              :in $ ?a
-                              :where
-                               [?e :invariant/rule ?a]
-                               [?e :invariant/query ?q]]
-                               (api/db connection)
-                            a)]
-        (prn "verifying" a inv-qs)
-        (when-not (api/q (read-string inv-qs)
-                       ;; current state
-                         (api/db connection)
-                       ;; apply transaction to current state
-                       (api/with (api/db connection) tx-data)
-                       ;; empty database with only transaction applied
-                       ;; TODO schema
-                       (api/with (datomic-empty-db schema) tx-data)
-                       tx-data)
-          (throw (ex-info "Invariant mismatch." {:type ::invariant-mismatch
-                                                 :attribute a
-                                                 :invariant (read-string inv-qs)
-                                                :tx-data tx-data})))))))
-
-(ensure-invariances-datomic conn schema example-txs)
-
-@(api/transact conn [[:db/add 123 :invariant/rule :account/balance]
-                   [:db/add 123 :invariant/query
-                    (pr-str '[:find ?matches .
-                              :in $before $after $txn
-                              :where
-                              ;; run the sub-query
-                              [(invariant.core/subquery "multi-transfer-sub"
-                                                        $before $after $txn)
-                               [[?sum-before ?sum-after ?sum-change]]]
-                              [(= ?sum-before ?sum-after)]
-                              [(= ?sum-change 0) ?matches]])]])
-
-(ensure-invariances-datomic conn
-                            schema
-                            [[:db/add 123 :invariant/rule :account/balance]
-                             [:db/add 123 :invariant/query
-                              (pr-str '[:find ?matches .
-                                        :in $before $after $txn
-                                        :where
-                                        ;; run the sub-query
-                                        [(invariant.core/subquery "multi-transfer-sub"
-                                                                  $before $after $txn)
-                                         [[?sum-before ?sum-after ?sum-change]]]
-                                        [(= ?sum-before ?sum-after)]
-                                        [(= ?sum-change 0) ?matches]])]])
-
-
-(def invalid1-transaction
-  [[:+v -1 :account/balance 0  +1]
-   [:+v -1 :account/balance 2 +52]
-   [:+v -1 :account/balance 3  -2]])
-
-
-(defn +v [db attr eid delta]
-  (let [m (d/pull db [attr] eid)
+(defn + [db eid attr delta]
+  (let [m (api/pull db [attr] eid)
         v (attr m 0)]
     [[:db/add eid attr (+ v delta)]]))
 
-(api/transact conn [{:db/id (api/tempid :db.part/user)
-                     :db/ident :+v
-                     :db/fn (api/function {:lang "clojure"
-                                           :params '[db _ attr eid delta]
-                                           :code '(let [m (d/pull db [attr] eid)
-                                                        v (attr m 0M)]
-                                                    [[:db/add eid attr (+ v delta)]])})}])
+(def ^:private tx-fns
+  [{:db/id    (api/tempid :db.part/user)
+    :db/ident :+
+    :db/fn    (api/function {:lang   "clojure"
+                             :params '[db eid attr delta]
+                             :code   '(let [m (d/pull db [attr] eid)
+                                            v (attr m 0M)]
+                                        [[:db/add eid attr (+ v delta)]])})}])
 
-@(api/transact conn invalid1-transaction)
+(let [counter (atom 0)]
+  (defn datomic-empty-db [schema]
+    (let [uri (str "datomic:mem:///temp-invariant-" (swap! counter inc))]
+      (api/create-database uri)
+      (let [conn (api/connect uri)]
+        @(api/transact conn schema)
+        @(api/transact conn tx-fns)
+        (api/db conn)))))
 
-(api/invoke (api/db conn) :+v)
+(defn- invariant-holds? [inv-qs conn tx-data schema]
+  (binding [*ns* (find-ns 'invariant.datomic)]
+    ((eval
+      (list 'fn '[$before $after $empty+txs $txs]
+            (unnest-query (read-string inv-qs)
+                          '[$before $after $empty+txs $txs])))
+     (api/db conn)
+     ;; apply transaction to current state
+     (:db-after (api/with (api/db conn) tx-data))
+     ;; empty database with only transaction applied
+     (:db-after (api/with (datomic-empty-db schema) tx-data))
+     tx-data)))
 
-;; tx-data to install the function
+(defn assert-invariants [conn schema tx-data]
+  (let [attr-txs (for [tx tx-data]
+                   [(get-attribute tx) tx])
+        attrs    (distinct (map first attr-txs))]
+    (doseq [[a tx] attr-txs
+            :when (= a :invariant/query)
+            :let [[_ _ _ v] tx]]
+      (assert-valid-query (edn/read-string v)))
 
-(api/transact conn [{:db/id (api/tempid :db.part/user)
-                     :db/ident :hello
-                     :db/fn (api/function {:lang "clojure"
-                                           :params []
-                                           :code '(println :hello)})}])
+    (doseq [a attrs
+            :let [inv-qs (api/q invariant-query (api/db conn) a)]
+            :when inv-qs]
+      (when-not (invariant-holds? inv-qs conn tx-data schema)
+        (throw (ex-info "Invariant mismatch."
+                        {:type      :invariant/invariant-mismatch
+                         :attribute a
+                         :invariant (edn/read-string inv-qs)
+                         :tx-data   tx-data}))))
+    true))
 
-(api/invoke (api/db conn) :hello)
-
-;; tx-data to call the function
-[[:add-doc "foo" "this is foo's doc"]]
-
-
-(ensure-invariances-datomic conn schema invalid1-transaction)
-
-(api/q '[:find ?a
-         :in $ $foo
-         :where
-         [(datomic.api/q '[:find ?a
-                           :in $ $foo
-                           :where
-                           [(nested-fn-call ?a 5)]]
-                         $ $foo)
-          ?a]
-         ]
-       (api/db conn)
-       :foo)
-
-
-)
+(defmethod invariant.core/invariant :datomic
+  [conn schema tx-data]
+  (assert-invariants conn schema tx-data))

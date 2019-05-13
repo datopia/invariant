@@ -14,10 +14,12 @@ Add the dependency to your project and follow `datahike_test.clj`.
 - document walk through test (marginalia)
 - explode transaction map representations temporarily (datomic?)
 - datomic support
+- check exhaustive unparsing of query syntax
+- get rid of eval
 
 
 ## License
 
-Copyright © 2018 Christian Weilbach, Danny Wilson
+Copyright © 2018-2019 Christian Weilbach, 2018 Danny Wilson
 
 Distributed under the MIT License.

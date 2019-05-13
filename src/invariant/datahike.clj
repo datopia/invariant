@@ -1,97 +1,66 @@
 (ns invariant.datahike
-  (:require [datahike.api :as d]
-            [datahike.core :as dc]
-            [datahike.parser :as p]
-            [datahike.db :as ddb]
-            [invariant.core :as ic]
+  (:refer-clojure :exclude [+])
+  (:require [datahike.api   :as d]
+            [datahike.core  :as dc]
+            [datahike.query :as dq]
+            [invariant.core]
+            [invariant.query
+             :refer [assert-valid-query invariant-query]]
             [clojure.edn :as edn]))
 
+(alter-var-root #'dq/built-ins assoc 'subquery datahike.api/q)
+
+(defn + [db eid attr delta]
+  (let [m (d/pull db [attr] eid)
+        v (attr m 0)]
+    [[:db/add eid attr (clojure.core/+ v delta)]]))
 
 (defn get-attribute-dispatch [v]
   (let [[a b] v]
-    (cond (= :db.fn/call a)
-          [:db.fn/call b]
-          :else a)))
+    (cond (= :db.fn/call a) [:db.fn/call b]
+          :else             a)))
 
 (defmulti get-attribute get-attribute-dispatch)
 
-(defn +v [db eid attr delta]
-  (let [m (d/pull db [attr] eid)
-        v (attr m 0)]
-    [[:db/add eid attr (+ v delta)]]))
-
-
-(defmethod get-attribute [:db.fn/call +v]
+(defmethod get-attribute [:db.fn/call +]
   [[_ _ eid attr delta]]
   attr)
-
 
 (defmethod get-attribute :db/add
   [[_ e a v]]
   a)
 
+(defn- invariant-holds? [inv-qs conn tx-data schema]
+  (d/q (edn/read-string inv-qs)
+       ;; current state
+       @conn
+       ;; apply transaction to current state
+       (dc/db-with @conn tx-data)
+       ;; empty database with only transaction applied
+       (dc/db-with (dc/empty-db schema) tx-data)
+       tx-data))
 
-(def allowed-fns (atom (into #{'datahike.api/q
-                              'd/q}
-                             (keys datahike.query/built-ins))))
-
-(defn valid-query? [query]
-  (let [res (p/parse-query query)
-        called-fns (->>
-                    (:qwhere res)
-                    (filter (fn [c]
-                              (let [t (type c)]
-                                (or
-                                 (= datahike.parser.Function t)
-                                 (= datahike.parser.Predicate t))))))]
-    (when-not (= (count (:qin res)) 4)
-      (throw (ex-info "The query operates on exactly 4 sources: $before, $after, $empty+tx, $txs"
-                      {:type :invariant/number-of-sources-not-4
-                       :sources (:qin res)})))
-    (doseq [c called-fns]
-      (let [f (:symbol (:fn c))]
-        (when (#{'datahike.api/q 'd/q} f)
-          (let [q (:value (first (:args c)))]
-            (valid-query? q)))
-        (when-not (@allowed-fns f)
-          (throw (ex-info "Function not allowed." {:type :invariant/invalid-function-call
-                                                   :call c})))))))
-
-
-
-(defn ensure-invariances [connection tx-data]
-  (let [attribute-txs (map (fn [tx] [(get-attribute tx) tx])
-                           tx-data)
-        attributes (distinct (map first attribute-txs))
-        schema (:schema @connection)]
-    (doseq [[a tx] attribute-txs
+(defn assert-invariants [conn tx-data]
+  (let [attr-txs (for [tx tx-data]
+                   [(get-attribute tx) tx])
+        attrs    (distinct (map first attr-txs))
+        schema   (:schema @conn)]
+    (doseq [[a tx] attr-txs
             :when (= a :invariant/query)
-            :let [[_ _ _ v] tx]]
-      (valid-query? (edn/read-string v)))
+            :let  [[_ _ _ v] tx]]
+      (assert-valid-query (edn/read-string v)))
 
-    (doseq [a attributes]
-      (when-let [inv-qs (d/q '[:find ?q .
-                              :in $ ?a
-                              :where
-                               [?e :invariant/rule ?a]
-                               [?e :invariant/query ?q]]
-                            @connection
-                            a)]
-        (when-not (d/q (edn/read-string inv-qs)
-                       ;; current state
-                       @connection
-                       ;; apply transaction to current state
-                       (dc/db-with @connection tx-data)
-                       ;; empty database with only transaction applied
-                       (dc/db-with (dc/empty-db schema) tx-data)
-                       tx-data)
-          (throw (ex-info "Invariant mismatch." {:type :invariant/invariant-mismatch
-                                                 :attribute a
-                                                 :invariant (edn/read-string inv-qs)
-                                                 :tx-data tx-data})))))
+    (doseq [a attrs
+            :let  [inv-qs (d/q invariant-query @conn a)]
+            :when inv-qs]
+      (when-not (invariant-holds? inv-qs conn tx-data schema)
+        (throw (ex-info "Invariant mismatch."
+                        {:type      :invariant/invariant-mismatch
+                         :attribute a
+                         :invariant (edn/read-string inv-qs)
+                         :tx-data   tx-data}))))
     true))
 
-
 (defmethod invariant.core/invariant :datahike
-  [connection tx-data]
-  (ensure-invariances connection tx-data))
+  [conn schema tx-data]
+  (assert-invariants conn tx-data))

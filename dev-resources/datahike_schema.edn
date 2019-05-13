@@ -1,0 +1,13 @@
+{:account/balance #:db{:cardinality :db.cardinality/one},
+ :voting/to #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
+ :transfer/unit #:db{:cardinality :db.cardinality/one},
+ :voting/from #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
+ :transfer/amount #:db{:cardinality :db.cardinality/one},
+ :account/unit #:db{:cardinality :db.cardinality/one},
+ :transfer/to #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
+ :transfer/from #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
+ :voting/delegate #:db{:valueType :db.type/ref,
+                       :cardinality :db.cardinality/one},
+ :block/height #:db{:cardinality :db.cardinality/one},
+ :account/name #:db{:cardinality :db.cardinality/one,
+                    :unique :db.unique/identity}}
