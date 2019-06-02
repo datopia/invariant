@@ -1,75 +1,173 @@
 (ns invariant.unparse
   (:require [datahike.parser :as parser])
   (:import  [datahike.parser
-             PlainSymbol Constant SrcVar Aggregate Query FindScalar FindRel
-             Pattern Variable BindScalar Predicate Function BindColl BindTuple]))
+             Aggregate And BindColl BindIgnore BindScalar BindTuple Constant
+             DefaultSrc FindColl FindRel FindScalar FindTuple Function Not Or
+             Pattern Placeholder PlainSymbol Predicate Pull Query Rule
+             RuleBranch RuleExpr RulesVar RuleVars SrcVar Variable]))
 
-;; inverse to p/parse-query
-(defmulti unparse type)
 
-(defmethod unparse Function
-  [f]
-  [(concat [(unparse (:fn f))]
-           (map unparse (:args f)))
-   (unparse (:binding f))])
+(defprotocol PUnparse
+  (-unparse [this]))
 
-(defmethod unparse PlainSymbol
-  [s]
-  (:symbol s))
-
-(defmethod unparse Constant
-  [c]
-  (:value c))
-
-(defmethod unparse SrcVar
-  [s]
-  (:symbol s))
-
-(defmethod unparse Query
-  [{:keys [qfind qwith qin qwhere]}]
-  (vec
-   (concat
-    [:find] (unparse qfind)
-    (when-not (empty? qwith)
-      (conj (map unparse qwith) :with))
-    (conj (map unparse qin) :in)
-    [:where]
-    (mapv (comp vec unparse) qwhere))))
-
-(defmethod unparse FindScalar
-  [s]
-  [(unparse (:element s)) '.])
-
-(defmethod unparse Variable
+(defn unparse
+  "Unparsing of datalog parser records back to the query DSL datastructure.
+  Specifically it is the inverse to datalog.parser/parse-query."
   [v]
-  (:symbol v))
+  (-unparse v))
 
-(defmethod unparse BindScalar
-  [v]
-  (unparse (:variable v)))
 
-(defmethod unparse BindColl
-  [bc]
-  [(unparse (:binding bc)) '...])
+;; ===== Missing Pull records
 
-(defmethod unparse BindTuple
-  [bt]
-  (mapv unparse (:bindings bt)))
+;; PullSpec
+;; PullAttrName
+;; PullReverseAttrName
+;; PullLimitExpr
+;; PullDefaultExpr
+;; PullWildcard
+;; PullRecursionLimit
+;; PullMapSpecEntry
+;; PullAttrWithOpts
 
-(defmethod unparse Predicate
-  [{:keys [fn args] :as p}]
-  [(conj (map unparse args)
-         (unparse fn))])
 
-(defmethod unparse FindRel
-  [fr]
-  (map unparse (:elements fr)))
+(extend-protocol PUnparse
+  Aggregate
+  (-unparse [{:keys [fn args]}]
+    (conj (map -unparse args)
+          (-unparse fn)))
 
-(defmethod unparse Aggregate
-  [{:keys [fn args]}]
-  (conj (map unparse args)
-        (unparse fn)))
+  ;; TODO test
+  And
+  (-unparse [{:keys [clauses]}]
+    (concat (list 'and)
+            (map -unparse clauses)))
 
-(defmethod unparse Pattern
-  [{:keys [source pattern] :as p}]
-  (concat [(unparse source)] (map unparse pattern)))
+  BindColl
+  (-unparse [bc]
+    [(-unparse (:binding bc)) '...])
+
+  ;; TODO test
+  BindIgnore
+  (-unparse [v] '_)
+
+  BindScalar
+  (-unparse [v]
+    (-unparse (:variable v)))
+
+  BindTuple
+  (-unparse [bt]
+    (mapv -unparse (:bindings bt)))
+
+  Constant
+  (-unparse [c] (:value c))
+
+  ;; TODO test
+  DefaultSrc
+  (-unparse [s])
+
+  ;; TODO test
+  FindColl
+  (-unparse [{:keys [element]}]
+    [[(-unparse element) '...]])
+
+  FindRel
+  (-unparse [fr]
+    (map -unparse (:elements fr)))
+
+  FindScalar
+  (-unparse [s]
+    [(-unparse (:element s)) '.])
+
+  ;; TODO test
+  FindTuple
+  (-unparse [{:keys [elements]}]
+    [(-unparse elements)])
+
+  Function
+  (-unparse [f]
+    [(concat [(-unparse (:fn f))]
+             (map -unparse (:args f)))
+     (-unparse (:binding f))])
+
+  ;; TODO test, check not-join
+  Not
+  (-unparse [{:keys [source vars clauses]}]
+    (concat (list (-unparse source) 'not)
+            (map -unparse clauses)))
+
+  ;; TODO test, check or-join
+  Or
+  (-unparse [{:keys [source rule-vars clauses]}]
+    (concat (list 'or)
+            (map -unparse clauses)))
+
+  Pattern
+  (-unparse [{:keys [source pattern] :as p}]
+    (concat [(-unparse source)] (map -unparse pattern)))
+
+  ;; TODO test
+  Placeholder
+  (-unparse [_] '_)
+
+  PlainSymbol
+  (-unparse [s] (:symbol s))
+
+  Predicate
+  (-unparse [{:keys [fn args] :as p}]
+    [(conj (map -unparse args)
+           (-unparse fn))])
+
+  ;; TODO test
+  Pull
+  (-unparse [{:keys [source variable pattern]}]
+    (list 'pull
+          (-unparse source) ;; TODO sugar remove $
+          (-unparse variable)
+          (-unparse pattern)))
+
+  Query
+  (-unparse [{:keys [qfind qwith qin qwhere]}]
+    (vec
+     (concat
+      [:find] (-unparse qfind)
+      (when-not (empty? qwith)
+        (conj (map -unparse qwith) :with))
+      (conj (map -unparse qin) :in)
+      [:where]
+      (mapv (comp vec -unparse) qwhere))))
+
+  ;; TODO test
+  Rule
+  (-unparse [{:keys [name branches]}]
+    (concat (list (-unparse name))
+            (map -unparse branches)))
+
+  ;; TODO test
+  RuleBranch
+  (-unparse [{:keys [vars clauses]}]
+    (mapv -unparse clauses))
+
+  ;; TODO test
+  RuleExpr
+  (-unparse [{:keys [source name args]}]
+    [(-unparse source) (concat (list (-unparse name))
+                               (map -unparse args))])
+
+  ;; TODO test
+  RulesVar
+  (-unparse [s] '%)
+
+  ;; TODO implement and test
+  RuleVars
+  (-unparse [{:keys [required free] :as v}]
+    (throw (ex-info "Rule Vars not supported yet." {:v v})))
+
+  SrcVar
+  (-unparse [s] (:symbol s))
+
+  Variable
+  (-unparse [v]
+    (:symbol v)))
+
+
+
