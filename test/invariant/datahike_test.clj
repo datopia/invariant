@@ -74,16 +74,93 @@
     (let [txn [[:db.fn/call + 3 :account/balance  +1]
                [:db.fn/call + 1 :account/balance  -3]
                [:db.fn/call + 2 :account/balance -50]
-               [:db.fn/call + 3 :account/balance +52]]]
+               [:db.fn/call + 3 :account/balance +52]
+               [:db/add 1 :transaction/signed-by 1]
+               [:db/add 1 :transaction/signed-by 2]]]
       (is (backend/assert-invariants backend txn)))
 
     ;; non-zero
     (let [txn [[:db.fn/call + 2 :account/balance +52]
                [:db.fn/call + 3 :account/balance  -2]
-               [:db.fn/call + 4 :account/balance  +1]]]
+               [:db.fn/call + 4 :account/balance  +1]
+               [:db/add 1 :transaction/signed-by 3]]]
       (is (common/balance-mismatch? backend txn)))
 
     ;; negative
     (let [txn [[:db.fn/call + 2 :account/balance +5000]
-               [:db.fn/call + 3 :account/balance -5000]]]
+               [:db.fn/call + 3 :account/balance -5000]
+               [:db/add 1 :transaction/signed-by 3]]]
+      (is (common/balance-mismatch? backend txn)))
+
+    ;; sender spending
+    (let [txn [[:db.fn/call + 3 :account/balance  +1]
+               [:db.fn/call + 1 :account/balance  -3]
+               [:db.fn/call + 2 :account/balance -50]
+               [:db.fn/call + 3 :account/balance +52]
+               [:db/add 1 :transaction/signed-by 3]]]
       (is (common/balance-mismatch? backend txn)))))
+
+
+(comment
+  ;; TODO check truthy (backend/assert-invariants backend txn)
+
+  ;; brittleness of ensuring to match?
+
+  (require '[datahike.core  :as dc]) 
+
+  (let [uri "datahike:mem:///invariant-test"]
+      (d/create-database-with-schema uri schema)
+      (binding [conn (d/connect uri)]
+        (d/transact conn common/example-txs)
+        (let [q '[:find ?matches .
+                  :in $before $after $empty+txs $txs
+                  :where
+                  ;; run the sub-query
+                  [(subquery [:find (sum ?balance-before) (sum ?balance-after) (sum ?balance-change)
+                              :with ?affected-entity
+                              :in $before $after $empty+txs $txs
+                              :where
+                              ;; Unify data from databases and transactions with affected-entity
+                              [$after      ?affected-entity         :account/balance    ?balance-after]
+                              [$empty+txs  ?affected-entity         :account/balance    ?balance-change]
+                              [(get-else $before ?affected-entity :account/balance 0) ?balance-before]
+
+                              ;; 1. Zero-Sum
+                              [(+ ?balance-change ?balance-before) ?computed-balance-after]
+                              [(= ?balance-after ?computed-balance-after)]
+
+                              ;; 2. Positivity
+                              [(>= ?balance-after 0)]
+
+                              ;; 3. Sender spending
+                              [$txs _ _ :transaction/signed-by ?sender]
+                              [(= ?sender ?affected-entity) ?is-sender]
+                              [(>= ?balance-change 0) ?pos-change]
+                              [(or ?is-sender ?pos-change)]]
+                             $before $after $empty+txs $txs)
+                   [[?sum-before ?sum-after ?sum-change]]]
+                  [(= ?sum-before ?sum-after)]
+                  [(= ?sum-change 0) ?matches]]
+              tid (backend/tempid backend :db.part/user)
+              txn [[:db.fn/call + 2 :account/balance  +1]
+                   [:db.fn/call + 3 :account/balance  -3]
+                   [:db.fn/call + 1 :account/balance -50]
+                   [:db.fn/call + 2 :account/balance +52]
+                   [:db/add 1 :transaction/signed-by 1]
+                   [:db/add 1 :transaction/signed-by 3]]
+              _ @(d/transact conn txn)
+              res
+              (d/q q
+                   ;; current state
+                   @conn
+                   ;; apply transaction to current state
+                   (dc/db-with @conn txn)
+                   ;; empty database with only transaction applied
+                   (dc/db-with (dc/empty-db schema) txn)
+                   txn)
+              ]
+          (d/delete-database uri)
+          res))) 
+
+
+  )
