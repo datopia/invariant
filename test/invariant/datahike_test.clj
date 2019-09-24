@@ -109,58 +109,104 @@
   (require '[datahike.core  :as dc]) 
 
   (let [uri "datahike:mem:///invariant-test"]
-      (d/create-database-with-schema uri schema)
-      (binding [conn (d/connect uri)]
-        (d/transact conn common/example-txs)
-        (let [q '[:find ?matches .
-                  :in $before $after $empty+txs $txs
-                  :where
-                  ;; run the sub-query
-                  [(subquery [:find (sum ?balance-before) (sum ?balance-after) (sum ?balance-change)
-                              :with ?affected-entity
-                              :in $before $after $empty+txs $txs
-                              :where
-                              ;; Unify data from databases and transactions with affected-entity
-                              [$after      ?affected-entity         :account/balance    ?balance-after]
-                              [$empty+txs  ?affected-entity         :account/balance    ?balance-change]
-                              [(get-else $before ?affected-entity :account/balance 0) ?balance-before]
+    (d/create-database-with-schema uri schema)
+    (binding [conn (d/connect uri)]
+      (d/transact conn common/example-txs)
+      (let [q '[:find ?matches .
+                :in $before $after $empty+txs $txs
+                :where
+                ;; run the sub-query
+                [(subquery [:find (sum ?balance-before) (sum ?balance-after) (sum ?balance-change)
+                            :with ?affected-account
+                            :in $before $after $empty+txs $txs
+                            :where
+                            ;; Unify data from databases and transactions with affected-account
+                            [$after      ?affected-account         :account/balance    ?balance-after]
+                            [$empty+txs  ?affected-account         :account/balance    ?balance-change]
+                            [(get-else $before ?affected-account :account/balance 0) ?balance-before]
 
-                              ;; 1. Zero-Sum
-                              [(+ ?balance-change ?balance-before) ?computed-balance-after]
-                              [(= ?balance-after ?computed-balance-after)]
+                            ;; 2. Positivity
+                            [(>= ?balance-after 0)]
 
-                              ;; 2. Positivity
-                              [(>= ?balance-after 0)]
-
-                              ;; 3. Sender spending
-                              [$txs _ _ :transaction/signed-by ?sender]
-                              [(= ?sender ?affected-entity) ?is-sender]
-                              [(>= ?balance-change 0) ?pos-change]
-                              [(or ?is-sender ?pos-change)]]
-                             $before $after $empty+txs $txs)
-                   [[?sum-before ?sum-after ?sum-change]]]
-                  [(= ?sum-before ?sum-after)]
-                  [(= ?sum-change 0) ?matches]]
-              tid (backend/tempid backend :db.part/user)
-              txn [[:db.fn/call + 2 :account/balance  +1]
-                   [:db.fn/call + 3 :account/balance  -3]
-                   [:db.fn/call + 1 :account/balance -50]
-                   [:db.fn/call + 2 :account/balance +52]
-                   [:db/add 1 :transaction/signed-by 1]
-                   [:db/add 1 :transaction/signed-by 3]]
-              _ @(d/transact conn txn)
-              res
-              (d/q q
-                   ;; current state
-                   @conn
-                   ;; apply transaction to current state
-                   (dc/db-with @conn txn)
-                   ;; empty database with only transaction applied
-                   (dc/db-with (dc/empty-db schema) txn)
-                   txn)
-              ]
-          (d/delete-database uri)
-          res))) 
+                            ;; 3. Sender spending
+                            [$txs _ _ :transaction/signed-by ?sender]
+                            [(= ?sender ?affected-account) ?is-sender]
+                            [(>= ?balance-change 0) ?pos-change]
+                            [(or ?is-sender ?pos-change)]]
+                           $before $after $empty+txs $txs)
+                 [[?sum-before ?sum-after ?sum-change]]]
+                ;; 1. Zero-Sum aggregated
+                [(= ?sum-before ?sum-after)]
+                [(= ?sum-change 0) ?matches]]
+            tid (backend/tempid backend :db.part/user)
+            txn [[:db.fn/call + 2 :account/balance  +1]
+                 [:db.fn/call + 3 :account/balance  -3]
+                 [:db.fn/call + 1 :account/balance -50]
+                 [:db.fn/call + 2 :account/balance +52]
+                 [:db/add 1 :transaction/signed-by 1]
+                 [:db/add 1 :transaction/signed-by 3]]
+            _ @(d/transact conn txn)
+            res
+            (d/q q
+                 ;; current state
+                 @conn
+                 ;; apply transaction to current state
+                 (dc/db-with @conn txn)
+                 ;; empty database with only transaction applied
+                 (dc/db-with (dc/empty-db schema) txn)
+                 txn)
+            ]
+        (d/delete-database uri)
+        res)))
 
 
+  ;; match cycles in all graphs
+  (let [uri "datahike:mem:///invariant-test"]
+    (d/create-database-with-schema uri schema)
+    (binding [conn (d/connect uri)]
+      (d/transact conn common/example-txs)
+      (let [q '[:find ?a ?b
+                :in $before $after $empty+txs $txs %
+                :where
+                [$after ?a :parent _]
+                [$after _  :parent ?b]
+                ($after ancestor? ?a ?a)]
+            txn [[:db/add 1 :parent 2]
+                 [:db/add 2 :parent 3]]
+            _ @(d/transact conn txn)
+            res
+            (d/q q
+                 ;; current state
+                 @conn
+                 ;; apply transaction to current state
+                 (dc/db-with @conn txn)
+                 ;; empty database with only transaction applied
+                 (dc/db-with (dc/empty-db schema) txn)
+                 txn
+                 '[[(ancestor? ?a ?b)
+                    [?a :parent ?b]
+                    #_(or-join [?a ?b]
+                     [?a :parent ?b]
+                     (and [?a :parent ?ap]
+                          (ancestor? ?ap ?b)))]])
+            ]
+        (d/delete-database uri)
+        res))) 
+
+
+(let [uri "datahike:mem:///invariant-test"]
+    (d/create-database-with-schema uri schema)
+    (binding [conn (d/connect uri)]
+      (let [q '[:find ?a
+                :in $
+                :where
+                [?a :parent ?a]]
+            txn [[:db/add 1 :parent 2]]
+            _ @(d/transact conn txn)
+            res
+            (d/q q
+                 (dc/db-with @conn txn))
+            ]
+        (d/delete-database uri)
+        res))) 
   )

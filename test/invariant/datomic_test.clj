@@ -169,7 +169,39 @@
                    (:db-after (d/with (invariant.d/datomic-empty-db schema) txn))
                    txn))]
         (d/delete-database uri)
-        res)))) 
+        res)))
+
+
+  (let [uri "datomic:mem:///invariant-test"]
+    (d/create-database uri)
+    (binding [conn (d/connect uri)]
+      @(d/transact conn schema)
+      (let [q '[:find ?a
+                :in $ %
+                :where
+                #_[?a :parent _]
+                #_[_  :parent ?b]
+                #_[?a :parent ?b]
+                [?a :parent _]
+                #_[?a :parent ?a]
+                #_(ancestor? ?a ?a)]
+            txn [[:db/add 1 :parent 2]
+                 [:db/add 2 :parent 3]]
+            _ @(d/transact conn txn)
+            res
+            (d/q q
+                 (:db-after (d/with (d/db conn) txn))
+                 '[[(ancestor? ?a ?b)
+                    [?a :parent ?b]
+                    #_(or-join [?a ?b]
+                               [?a :parent ?b]
+                               (and [?a :parent ?ap]
+                                    (ancestor? ?ap ?b)))]])
+            ]
+        (d/delete-database uri)
+        res))) 
+
+  )
 
 
 

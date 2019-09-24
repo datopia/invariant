@@ -85,3 +85,5 @@
        (backend/assert-invariants backend txs)
        (catch Exception e
          (select-keys (ex-data e) #{:type :attribute})))))
+
+

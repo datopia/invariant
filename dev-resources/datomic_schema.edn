@@ -4,6 +4,11 @@
       :cardinality :db.cardinality/one
       :db.install/_attribute :db.part/db}
  #:db{:id #db/id[:db.part/db]
+      :ident :parent
+      :valueType :db.type/ref
+      :cardinality :db.cardinality/one
+      :db.install/_attribute :db.part/db}
+ #:db{:id #db/id[:db.part/db]
       :ident :invariant/query
       :valueType :db.type/string
       :cardinality :db.cardinality/one

@@ -47,3 +47,99 @@
                     :account/name "Danny",
                     :account/balance 3000M,
                     :account/unit :datom}]))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(require '[datahike.api :refer :all])
+
+
+(def uri "datahike:mem:///test")
+
+;; create a database at this place
+(create-database uri)
+
+(def conn (connect uri))
+
+;; lets add some data and wait for the transaction
+@(transact conn [{ :db/id 1, :name  "Ivan", :age   15 }
+                 { :db/id 2, :name  "Petr", :age   37 }
+                 { :db/id 3, :name  "Ivan", :age   37 }
+                 { :db/id 4, :age 15 }])
+
+
+(require '[clojure.string :as str])
+
+(q '[:find ?name (count ?e)
+     :where
+     [?e :name ?name]
+     [(str/includes? ?name "Iv")]]
+   @conn)	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
