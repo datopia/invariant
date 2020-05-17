@@ -46,7 +46,7 @@
                    {:db/id 3,
                     :account/name "Danny",
                     :account/balance 3000M,
-                    :account/unit :datom}]))
+                    :account/unit :datom}])
 
 
 
@@ -143,3 +143,4 @@
 
 
 
+)

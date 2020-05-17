@@ -3,5 +3,5 @@
 (defprotocol Backend
   (tempid            [_ v])
   (unnest-query      [_ q sources])
-  (assert-invariants [_ txs])
+  (assert-invariants [_ txs schema])
   (transact          [_ txs]))

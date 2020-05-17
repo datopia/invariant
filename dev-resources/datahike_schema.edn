@@ -1,13 +1,27 @@
-{:account/balance #:db{:cardinality :db.cardinality/one},
- :voting/to #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
- :transfer/unit #:db{:cardinality :db.cardinality/one},
- :voting/from #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
- :transfer/amount #:db{:cardinality :db.cardinality/one},
- :account/unit #:db{:cardinality :db.cardinality/one},
- :transfer/to #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
- :transfer/from #:db{:valueType :db.type/ref, :cardinality :db.cardinality/one},
- :voting/delegate #:db{:valueType :db.type/ref,
-                       :cardinality :db.cardinality/one},
- :block/height #:db{:cardinality :db.cardinality/one},
- :account/name #:db{:cardinality :db.cardinality/one,
-                    :unique :db.unique/identity}}
+[#:db{:ident :invariant/rule
+      :valueType :db.type/keyword
+      :cardinality :db.cardinality/one
+      }
+ #:db{:ident :parent
+      :valueType :db.type/ref
+      :cardinality :db.cardinality/one
+      }
+ #:db{:ident :invariant/query
+      :valueType :db.type/string
+      :cardinality :db.cardinality/one
+      }
+ #:db{:ident :account/name
+      :valueType :db.type/string
+      :cardinality :db.cardinality/one
+      }
+ #:db{:ident :account/balance
+      :valueType :db.type/bigdec
+      :cardinality :db.cardinality/one
+      }
+ #:db{:ident :account/unit
+      :valueType :db.type/keyword
+      :cardinality :db.cardinality/one
+      }
+ #:db{:ident :transaction/signed-by
+      :valueType :db.type/long
+      :cardinality :db.cardinality/many}]

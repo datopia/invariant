@@ -6,11 +6,13 @@
              :refer [+]]
             [invariant.test.common       :as common]
             [invariant.query
-             :refer [assert-valid-query]]
+             :refer [assert-valid-query assert-safe-query]]
             [invariant.test.util
              :refer [read-resource]]
-            [datahike.api                :as d]
+            [datahike.api :refer [q]               :as d]
             [invariant.backend           :as backend]))
+
+
 
 (deftest attribute-test
   (testing "Attribute extraction."
@@ -20,12 +22,47 @@
     (is (= :foo
            (invariant.d/get-attribute [:db.fn/call invariant.datahike/+ 1 :foo 3])))))
 
+(deftest valid-safe-test
+  (testing "Queries safe to run."
+    (is (= '{:type :invariant/invalid-function-call,
+             :call #datalog.parser.type.Predicate{:fn #datalog.parser.type.PlainSymbol{:symbol nested-evil},
+                                                  :args [#datalog.parser.type.Variable{:symbol ?a}
+                                                         #datalog.parser.type.Constant{:value 5}]}}
+
+           (try
+             (assert-safe-query '[:find ?a
+                                   :in   $a
+                                   :where
+                                   [(subquery [:find  ?a
+                                               :in    $a
+                                               :where [(nested-evil ?a 5)]]
+                                              $a) ?a]])
+             (catch Exception e
+               (ex-data e)))))
+    (is (= '{:type :invariant/invalid-function-call,
+             :call #datalog.parser.type.Function{:fn #datalog.parser.type.PlainSymbol{:symbol nested-evil},
+                                                  :args [#datalog.parser.type.Variable{:symbol ?a}
+                                                         #datalog.parser.type.Constant{:value 5}]
+                                                 :binding #datalog.parser.type.BindScalar{:variable #datalog.parser.type.Variable{:symbol ?b}}}}
+
+           (try
+             (assert-safe-query '[:find ?a
+                                  :in   $a
+                                  :where
+                                  [(subquery [:find  ?a
+                                              :in    $a
+                                              :where [(nested-evil ?a 5) ?b]]
+                                             $a) ?a]])
+             (catch Exception e
+               (ex-data e)))))
+    ))
+
 (deftest valid-query-test
   (testing "Valid queries."
     (is (= '{:type :invariant/invalid-function-call,
-             :call #datahike.parser.Predicate{:fn #datahike.parser.PlainSymbol{:symbol nested-evil},
-                                              :args [#datahike.parser.Variable{:symbol ?a}
-                                                     #datahike.parser.Constant{:value 5}]}}
+             :call #datalog.parser.type.Predicate{:fn #datalog.parser.type.PlainSymbol{:symbol nested-evil},
+                                              :args [#datalog.parser.type.Variable{:symbol ?a}
+                                                     #datalog.parser.type.Constant{:value 5}]}}
 
            (try
              (assert-valid-query '[:find ?a
@@ -48,15 +85,16 @@
       (d/tempid v))
     (unnest-query [_ q sources]
       nil)
-    (assert-invariants [_ txs]
-      (invariant.d/assert-invariants conn txs))
+    (assert-invariants [_ txs schema]
+      (invariant.d/assert-invariants conn txs schema))
     (transact [_ txs]
-      (d/transact conn txs))))
+      (d/transact! conn txs))))
 
 (let [uri "datahike:mem:///invariant-test"]
   (defn datahike-db-fixture [f]
-    (d/create-database-with-schema uri schema)
+    (d/create-database uri)
     (binding [conn (d/connect uri)]
+      (d/transact conn schema)
       (d/transact conn common/example-txs)
       (f)
       (d/delete-database uri))))
@@ -65,11 +103,11 @@
 
 (deftest bad-invariant-deployment
   (testing "Testing deployment of bad invariant."
-    (is (common/bad-invariant-deployment? backend))))
+    (is (common/bad-invariant-deployment? backend schema))))
 
 (deftest invariant-deployment
   (testing "Testing deployment of valid invariant."
-    (is (common/deployed-valid-invariant? backend))
+    (is (common/deployed-valid-invariant? backend schema))
 
     (let [txn [[:db.fn/call + 3 :account/balance  +1]
                [:db.fn/call + 1 :account/balance  -3]
@@ -77,20 +115,20 @@
                [:db.fn/call + 3 :account/balance +52]
                [:db/add 1 :transaction/signed-by 1]
                [:db/add 1 :transaction/signed-by 2]]]
-      (is (backend/assert-invariants backend txn)))
+      (is (backend/assert-invariants backend txn schema)))
 
     ;; non-zero
     (let [txn [[:db.fn/call + 2 :account/balance +52]
                [:db.fn/call + 3 :account/balance  -2]
-               [:db.fn/call + 4 :account/balance  +1]
+               [:db.fn/call + 1 :account/balance  +1]
                [:db/add 1 :transaction/signed-by 3]]]
-      (is (common/balance-mismatch? backend txn)))
+      (is (common/balance-mismatch? backend txn schema)))
 
     ;; negative
     (let [txn [[:db.fn/call + 2 :account/balance +5000]
                [:db.fn/call + 3 :account/balance -5000]
                [:db/add 1 :transaction/signed-by 3]]]
-      (is (common/balance-mismatch? backend txn)))
+      (is (common/balance-mismatch? backend txn schema)))
 
     ;; sender spending
     (let [txn [[:db.fn/call + 3 :account/balance  +1]
@@ -98,7 +136,9 @@
                [:db.fn/call + 2 :account/balance -50]
                [:db.fn/call + 3 :account/balance +52]
                [:db/add 1 :transaction/signed-by 3]]]
-      (is (common/balance-mismatch? backend txn)))))
+      (is (common/balance-mismatch? backend txn schema)))))
+
+
 
 
 (comment
@@ -108,9 +148,10 @@
 
   (require '[datahike.core  :as dc]) 
 
-  (let [uri "datahike:mem:///invariant-test"]
-    (d/create-database-with-schema uri schema)
+  (let [uri "datahike:mem:///invariant-test-2"]
+    (d/create-database uri)
     (binding [conn (d/connect uri)]
+      (d/transact conn schema)
       (d/transact conn common/example-txs)
       (let [q '[:find ?matches .
                 :in $before $after $empty+txs $txs
@@ -138,14 +179,18 @@
                 ;; 1. Zero-Sum aggregated
                 [(= ?sum-before ?sum-after)]
                 [(= ?sum-change 0) ?matches]]
-            tid (backend/tempid backend :db.part/user)
-            txn [[:db.fn/call + 2 :account/balance  +1]
-                 [:db.fn/call + 3 :account/balance  -3]
-                 [:db.fn/call + 1 :account/balance -50]
-                 [:db.fn/call + 2 :account/balance +52]
-                 [:db/add 1 :transaction/signed-by 1]
-                 [:db/add 1 :transaction/signed-by 3]]
-            _ @(d/transact conn txn)
+            txn [[:db.fn/call + 2 :account/balance  +52]
+                 [:db.fn/call + 3 :account/balance  -2]
+                 [:db.fn/call + 1 :account/balance +1]
+                 [:db/add 1 :transaction/signed-by 3]
+
+                 ]
+            #_[[:db.fn/call + 2 :account/balance +52]
+             [:db.fn/call + 3 :account/balance  -2]
+               [:db.fn/call + 4 :account/balance  +1]
+             [:db/add 1 :transaction/signed-by 3]]
+
+            _ (d/transact conn txn)
             res
             (d/q q
                  ;; current state
@@ -153,27 +198,59 @@
                  ;; apply transaction to current state
                  (dc/db-with @conn txn)
                  ;; empty database with only transaction applied
-                 (dc/db-with (dc/empty-db schema) txn)
+                 (dc/db-with (dc/empty-db) (concat schema txn))
                  txn)
             ]
         (d/delete-database uri)
-        res)))
+        res))) 
 
+
+  (require '[datahike.api :as d])
+
+  (def uri "datahike:mem://simple_recursion")
+
+  (d/delete-database uri)
+
+  (d/create-database uri :schema-on-read true)
+
+  (def conn (d/connect uri))
+
+  (d/transact conn [{:db/id 1
+                     :ancestor 2}
+                    {:db/id 2
+                     :ancestor 3}
+                    {:db/id 3
+                     :ancestor 4}])
+
+  (def rule '[[(ancestor ?e1 ?e2)
+               [?e1 :ancestor ?e2]]
+              [(ancestor ?e1 ?e2)
+               [?e1 :ancestor ?t]
+               (ancestor ?t ?e2)]])
+
+  (d/q '[:find  ?u1 ?u2
+         :in    $ %
+         :where (ancestor ?u1 ?u2)]
+       @conn
+       rule)
 
   ;; match cycles in all graphs
   (let [uri "datahike:mem:///invariant-test"]
-    (d/create-database-with-schema uri schema)
+    (d/create-database uri :schema-on-read true)
     (binding [conn (d/connect uri)]
-      (d/transact conn common/example-txs)
-      (let [q '[:find ?a ?b
+      #_(d/transact conn common/example-txs)
+      (let [q '[:find (count ?a) .
                 :in $before $after $empty+txs $txs %
                 :where
-                [$after ?a :parent _]
-                [$after _  :parent ?b]
-                ($after ancestor? ?a ?a)]
-            txn [[:db/add 1 :parent 2]
-                 [:db/add 2 :parent 3]]
-            _ @(d/transact conn txn)
+                ($after ancestor ?a ?b)
+                [(= ?a ?b)]]
+            txn [{:db/id 1
+                  :ancestor 2}
+                 {:db/id 2
+                  :ancestor 3}
+                 {:db/id 3
+                  :ancestor 1}]
+            _ (d/transact conn txn)
             res
             (d/q q
                  ;; current state
@@ -181,14 +258,13 @@
                  ;; apply transaction to current state
                  (dc/db-with @conn txn)
                  ;; empty database with only transaction applied
-                 (dc/db-with (dc/empty-db schema) txn)
+                 (dc/db-with (dc/empty-db) txn)
                  txn
-                 '[[(ancestor? ?a ?b)
-                    [?a :parent ?b]
-                    #_(or-join [?a ?b]
-                     [?a :parent ?b]
-                     (and [?a :parent ?ap]
-                          (ancestor? ?ap ?b)))]])
+                 '[[(ancestor ?e1 ?e2)
+                    [?e1 :ancestor ?e2]]
+                   [(ancestor ?e1 ?e2)
+                    [?e1 :ancestor ?t]
+                    (ancestor ?t ?e2)]])
             ]
         (d/delete-database uri)
         res))) 

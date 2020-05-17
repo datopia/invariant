@@ -18,7 +18,7 @@
       (d/tempid v))
     (unnest-query [_ q sources]
       (invariant.d/unnest-query q sources))
-    (assert-invariants [_ txs]
+    (assert-invariants [_ txs schema]
       (invariant.d/assert-invariants conn schema txs))
     (transact [_ txs]
       (d/transact conn txs))))
@@ -55,7 +55,7 @@
 
 (deftest bad-invariant-deployment
   (testing "Testing deployment of bad invariant."
-    (is (common/bad-invariant-deployment? backend))))
+    (is (common/bad-invariant-deployment? backend schema))))
 
 (deftest invariant-deployment
   (testing "Testing deployment of valid invariant."
@@ -68,7 +68,7 @@
                [:+ 2 :account/balance +52]
                [:db/add 0 :transaction/signed-by 1]
                [:db/add 0 :transaction/signed-by 3]]]
-      (is (backend/assert-invariants backend txn)))
+      (is (backend/assert-invariants backend txn schema)))
 
     ;; non-zero
     (let [txn [[:+ 0 :account/balance  +1]
@@ -76,21 +76,23 @@
                [:+ 3 :account/balance  -2]
                [:db/add 0 :transaction/signed-by 1]
                [:db/add 0 :transaction/signed-by 3]]]
-      (is (common/balance-mismatch? backend txn)))
+      (is (common/balance-mismatch? backend txn schema)))
 
     ;; negative
     (let [txn [[:+ 2 :account/balance +5000]
                [:+ 3 :account/balance -5000]
                [:db/add 0 :transaction/signed-by 1]
                [:db/add 0 :transaction/signed-by 3]]]
-      (is (common/balance-mismatch? backend txn)))
+      (is (common/balance-mismatch? backend txn schema)))
 
     (let [txn [[:+ 0 :account/balance  +1]
                [:+ 3 :account/balance  -3]
                [:+ 1 :account/balance -50]
                [:+ 2 :account/balance +52]
                [:db/add 0 :transaction/signed-by 3]]]
-      (is (common/balance-mismatch? backend txn)))))
+      (is (common/balance-mismatch? backend txn schema)))
+
+    ))
 
 
 (comment
@@ -202,7 +204,4 @@
         res))) 
 
   )
-
-
-
 

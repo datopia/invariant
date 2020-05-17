@@ -1,12 +1,12 @@
 (ns invariant.datomic
   (:refer-clojure :exclude [+])
   (:require [datomic.api     :as api]
-            [datahike.parser :as p]
+            [datalog.parser :as p]
             [clojure.edn     :as edn]
             [invariant.core]
             [invariant.query
              :refer [assert-valid-query invariant-query]]
-            [invariant.unparse :refer [unparse]]))
+            [datalog.unparser :refer [unparse]]))
 
 (defn get-attribute-dispatch [v]
   (first v))
@@ -22,9 +22,9 @@
   a)
 
 (let [subq-selector (comp #{'subquery} :symbol :fn)
-      fn-selector   (comp #{datahike.parser.Function} type)]
+      fn-selector   (comp #{datalog.parser.type.Function} type)]
   (defn unnest-deep-queries [[_ [_ query] & sources]]
-    (let [res              (p/parse-query query)
+    (let [res              (p/parse query)
           clean-clauses    (remove subq-selector (:qwhere res))
           nested-functions (->> (:qwhere res)
                                 (filter fn-selector)
