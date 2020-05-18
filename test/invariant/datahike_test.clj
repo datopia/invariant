@@ -10,6 +10,7 @@
             [invariant.test.util
              :refer [read-resource]]
             [datahike.api :refer [q]               :as d]
+            [datahike.core  :as dc]
             [invariant.backend           :as backend]))
 
 
@@ -105,6 +106,77 @@
   (testing "Testing deployment of bad invariant."
     (is (common/bad-invariant-deployment? backend schema))))
 
+(deftest cycle-invariant-test
+  (testing "A test checking a graph for cycles."
+    ;; match cycles in all graphs
+    (is (= 3
+         (let [uri "datahike:mem:///invariant-test"]
+           (d/create-database uri :schema-on-read true)
+           (binding [conn (d/connect uri)]
+             (d/transact conn [{:db/id 1
+                                :ancestor 2}
+                               {:db/id 2
+                                :ancestor 3}])
+             (let [q '[:find (count ?a) .
+                       :in $before $after $empty+txs $txs %
+                       :where
+                       ($after ancestor ?a ?b)
+                       [(= ?a ?b)]]
+                   txn [
+                        {:db/id 3
+                         :ancestor 1}]
+                   res
+                   (d/q q
+                        ;; current state
+                        @conn
+                        ;; apply transaction to current state
+                        (:db-after (d/with @conn txn))
+                        ;; empty database with only transaction applied
+                        (:db-after (d/with (dc/empty-db) txn))
+                        txn
+                        '[[(ancestor ?e1 ?e2)
+                           [?e1 :ancestor ?e2]]
+                          [(ancestor ?e1 ?e2)
+                           [?e1 :ancestor ?t]
+                           (ancestor ?t ?e2)]])
+                   ]
+               (d/delete-database uri)
+               res)))))
+
+    (is (nil?
+         (let [uri "datahike:mem:///invariant-test"]
+           (d/create-database uri :schema-on-read true)
+           (binding [conn (d/connect uri)]
+             (d/transact conn [{:db/id 1
+                                :ancestor 2}
+                               {:db/id 2
+                                :ancestor 3}])
+             (let [q '[:find (count ?a) .
+                       :in $before $after $empty+txs $txs %
+                       :where
+                       ($after ancestor ?a ?b)
+                       [(= ?a ?b)]]
+                   txn [
+                        {:db/id 3
+                         :ancestor 4}]
+                   res
+                   (d/q q
+                        ;; current state
+                        @conn
+                        ;; apply transaction to current state
+                        (:db-after (d/with @conn txn))
+                        ;; empty database with only transaction applied
+                        (:db-after (dc/empty-db) txn)
+                        txn
+                        '[[(ancestor ?e1 ?e2)
+                           [?e1 :ancestor ?e2]]
+                          [(ancestor ?e1 ?e2)
+                           [?e1 :ancestor ?t]
+                           (ancestor ?t ?e2)]])
+                   ]
+               (d/delete-database uri)
+               res)))))))
+
 (deftest invariant-deployment
   (testing "Testing deployment of valid invariant."
     (is (common/deployed-valid-invariant? backend schema))
@@ -145,8 +217,6 @@
   ;; TODO check truthy (backend/assert-invariants backend txn)
 
   ;; brittleness of ensuring to match?
-
-  (require '[datahike.core  :as dc]) 
 
   (let [uri "datahike:mem:///invariant-test-2"]
     (d/create-database uri)
@@ -234,55 +304,4 @@
        @conn
        rule)
 
-  ;; match cycles in all graphs
-  (let [uri "datahike:mem:///invariant-test"]
-    (d/create-database uri :schema-on-read true)
-    (binding [conn (d/connect uri)]
-      #_(d/transact conn common/example-txs)
-      (let [q '[:find (count ?a) .
-                :in $before $after $empty+txs $txs %
-                :where
-                ($after ancestor ?a ?b)
-                [(= ?a ?b)]]
-            txn [{:db/id 1
-                  :ancestor 2}
-                 {:db/id 2
-                  :ancestor 3}
-                 {:db/id 3
-                  :ancestor 1}]
-            _ (d/transact conn txn)
-            res
-            (d/q q
-                 ;; current state
-                 @conn
-                 ;; apply transaction to current state
-                 (dc/db-with @conn txn)
-                 ;; empty database with only transaction applied
-                 (dc/db-with (dc/empty-db) txn)
-                 txn
-                 '[[(ancestor ?e1 ?e2)
-                    [?e1 :ancestor ?e2]]
-                   [(ancestor ?e1 ?e2)
-                    [?e1 :ancestor ?t]
-                    (ancestor ?t ?e2)]])
-            ]
-        (d/delete-database uri)
-        res))) 
-
-
-(let [uri "datahike:mem:///invariant-test"]
-    (d/create-database-with-schema uri schema)
-    (binding [conn (d/connect uri)]
-      (let [q '[:find ?a
-                :in $
-                :where
-                [?a :parent ?a]]
-            txn [[:db/add 1 :parent 2]]
-            _ @(d/transact conn txn)
-            res
-            (d/q q
-                 (dc/db-with @conn txn))
-            ]
-        (d/delete-database uri)
-        res))) 
   )

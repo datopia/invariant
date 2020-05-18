@@ -37,6 +37,11 @@
                    :valueType             :db.type/string
                    :cardinality           :db.cardinality/one
                    :invariant/query       "[:find ...]"
+                   :db.install/_attribute :db.part/db}
+              #:db{:id                    #db/id[:db.part/db]
+                   :ident                 :ancestor
+                   :valueType             :db.type/long
+                   :cardinality           :db.cardinality/one
                    :db.install/_attribute :db.part/db}])
       @(d/transact conn common/example-txs)
       @(d/transact
@@ -56,6 +61,69 @@
 (deftest bad-invariant-deployment
   (testing "Testing deployment of bad invariant."
     (is (common/bad-invariant-deployment? backend schema))))
+
+(deftest cycle-invariant-test
+  (testing "A test checking a graph for cycles."
+    ;; match cycles in all graphs
+    (is (= 3
+             (let [q '[:find (count ?a) .
+                       :in $before $after $empty+txs $txs %
+                       :where
+                       ($after ancestor ?a ?b)
+                       [(= ?a ?b)]]
+                   ;; initial DB
+                   empty-db (d/db conn)
+                   _ @(d/transact conn [{:db/id 1
+                                         :ancestor 2}
+                                        {:db/id 2
+                                         :ancestor 3}])
+                   txn [{:db/id 3
+                         :ancestor 1}]
+                   res
+                   (d/q q
+                        ;; current state
+                        (d/db conn)
+                        ;; apply transaction to current state
+                        (:db-after (d/with (d/db conn) txn))
+                        ;; empty database with only transaction applied
+                        (:db-after (d/with empty-db txn))
+                        txn
+                        '[[(ancestor ?e1 ?e2)
+                           [?e1 :ancestor ?e2]]
+                          [(ancestor ?e1 ?e2)
+                           [?e1 :ancestor ?t]
+                           (ancestor ?t ?e2)]])]
+               res)))
+
+    (is (nil?
+         (let [q '[:find (count ?a) .
+                   :in $before $after $empty+txs $txs %
+                   :where
+                   ($after ancestor ?a ?b)
+                   [(= ?a ?b)]]
+               ;; initial DB
+               empty-db (d/db conn)
+               _ @(d/transact conn [{:db/id 1
+                                     :ancestor 2}
+                                    {:db/id 2
+                                     :ancestor 3}])
+               txn [{:db/id 3
+                     :ancestor 4}]
+               res
+               (d/q q
+                    ;; current state
+                    (d/db conn)
+                    ;; apply transaction to current state
+                    (:db-after (d/with (d/db conn) txn))
+                    ;; empty database with only transaction applied
+                    (:db-after (d/with empty-db txn))
+                    txn
+                    '[[(ancestor ?e1 ?e2)
+                       [?e1 :ancestor ?e2]]
+                      [(ancestor ?e1 ?e2)
+                       [?e1 :ancestor ?t]
+                       (ancestor ?t ?e2)]])]
+           res)))))
 
 (deftest invariant-deployment
   (testing "Testing deployment of valid invariant."
@@ -172,36 +240,6 @@
                    txn))]
         (d/delete-database uri)
         res)))
-
-
-  (let [uri "datomic:mem:///invariant-test"]
-    (d/create-database uri)
-    (binding [conn (d/connect uri)]
-      @(d/transact conn schema)
-      (let [q '[:find ?a
-                :in $ %
-                :where
-                #_[?a :parent _]
-                #_[_  :parent ?b]
-                #_[?a :parent ?b]
-                [?a :parent _]
-                #_[?a :parent ?a]
-                #_(ancestor? ?a ?a)]
-            txn [[:db/add 1 :parent 2]
-                 [:db/add 2 :parent 3]]
-            _ @(d/transact conn txn)
-            res
-            (d/q q
-                 (:db-after (d/with (d/db conn) txn))
-                 '[[(ancestor? ?a ?b)
-                    [?a :parent ?b]
-                    #_(or-join [?a ?b]
-                               [?a :parent ?b]
-                               (and [?a :parent ?ap]
-                                    (ancestor? ?ap ?b)))]])
-            ]
-        (d/delete-database uri)
-        res))) 
 
   )
 
