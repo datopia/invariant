@@ -58,7 +58,7 @@
                [:db/add tid :invariant/query (pr-str bad-invariant)]]]
       (= '{:type :invariant/invalid-function-call,
            :call #datalog.parser.type.Predicate
-           {:fn #datalog.parser.type.PlainSymbol{:symbol evil-haha},
+           {:fn   #datalog.parser.type.PlainSymbol{:symbol evil-haha},
             :args [#datalog.parser.type.Constant{:value 1}
                    #datalog.parser.type.Constant{:value 2}
                    #datalog.parser.type.Constant{:value 3}]}}
@@ -86,5 +86,3 @@
        (backend/assert-invariants backend txs schema)
        (catch Exception e
          (select-keys (ex-data e) #{:type :attribute})))))
-
-
