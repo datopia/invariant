@@ -5,8 +5,7 @@
             [invariant.datahike          :as invariant.d
              :refer [+]]
             [invariant.test.common       :as common]
-            [invariant.query
-             :refer [assert-valid-query assert-safe-query]]
+            [invariant.query :refer [assert-valid-query assert-safe-query]]
             [invariant.test.util
              :refer [read-resource]]
             [datahike.api :refer [q]     :as d]
