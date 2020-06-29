@@ -1,7 +1,7 @@
 (ns invariant.datomic
   (:refer-clojure :exclude [+])
   (:require [datomic.api     :as api]
-            [datalog.parser :as p]
+            [datalog.parser  :as p]
             [clojure.edn     :as edn]
             [invariant.core]
             [invariant.query
@@ -29,21 +29,21 @@
           nested-functions (->> (:qwhere res)
                                 (filter fn-selector)
                                 (filter subq-selector))]
-            (concat
-             (list 'datomic.api/q
-                   (list 'quote
-                         (unparse
-                          (-> res
-                              (assoc :qwhere clean-clauses)
-                              (update :qin concat
-                                      (map :binding nested-functions))))))
-             sources
-             (map (comp unnest-deep-queries
+      (concat
+       (list 'datomic.api/q
+             (list 'quote
+                   (unparse
+                    (-> res
+                        (assoc :qwhere clean-clauses)
+                        (update :qin concat
+                                (map :binding nested-functions))))))
+       sources
+       (map (comp unnest-deep-queries
                         ;; subquery first argument
-                        #(concat (list 'api/q (list 'quote (second %))) sources)
-                        first
-                        unparse)
-                  nested-functions)))))
+                  #(concat (list 'api/q (list 'quote (second %))) sources)
+                  first
+                  unparse)
+            nested-functions)))))
 
 (defn unnest-query [query sources]
   (unnest-deep-queries (concat ['_ (list 'quote query)] sources)))

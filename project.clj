@@ -9,4 +9,4 @@
                  [com.datomic/datomic-free "0.9.5697" :scope "provided"]]
   :plugins      [[lein-marginalia "0.9.1"]]
   :profiles     {:dev {:dependencies []
-                       :source-paths ["test-support"]}})
+                       :source-paths ["test-support" "dev"]}})
