@@ -5,12 +5,14 @@
             [invariant.datahike          :as invariant.d
              :refer [+]]
             [invariant.test.common       :as common]
-            [invariant.query :refer [assert-valid-query assert-safe-query]]
+            [invariant.query
+             :refer [assert-valid-query assert-safe-query]]
+            [invariant.backend           :as backend]
             [invariant.test.util
              :refer [read-resource]]
-            [datahike.api :refer [q]     :as d]
-            [datahike.core  :as dc]
-            [invariant.backend           :as backend]))
+            [datahike.api                :as d
+             :refer [q]]
+            [datahike.core  :as dc]))
 
 (deftest attribute-test
   (testing "Attribute extraction."
@@ -22,11 +24,7 @@
 
 (deftest valid-query-test
   (testing "Valid queries."
-    (is (= '{:type :invariant/invalid-function-call,
-             :call #datalog.parser.type.Predicate{:fn   #datalog.parser.type.PlainSymbol{:symbol nested-evil},
-                                                  :args [#datalog.parser.type.Variable{:symbol ?a}
-                                                         #datalog.parser.type.Constant{:value 5}]}}
-
+    (is (= :invariant/invalid-function-call
            (try
              (assert-valid-query '[:find ?a
                                    :in   $a $b $c $d
@@ -36,7 +34,7 @@
                                                :where [(nested-evil ?a 5)]]
                                               $a $b $c $d) ?a]])
              (catch Exception e
-               (ex-data e)))))))
+               (-> e ex-data :type)))))))
 
 (def schema (read-resource "datahike_schema.edn"))
 
@@ -68,72 +66,38 @@
   (testing "Testing deployment of bad invariant."
     (is (common/bad-invariant-deployment? backend schema))))
 
+(let [uri "datahike:mem:///invariant-test"]
+  (defn cycle-query [txn]
+    (d/create-database uri :schema-on-read true)
+    (binding [conn (d/connect uri)]
+      (d/transact conn [{:db/id 1 :ancestor 2}
+                        {:db/id 2 :ancestor 3}])
+      (let [res (d/q '[:find  (count ?a) .
+                       :in    $before $after $empty+txs $txs %
+                       :where
+                       ($after ancestor ?a ?b)
+                       [(= ?a ?b)]]
+                     ;; current state
+                     @conn
+                     ;; apply transaction to current state
+                     (:db-after (d/with @conn txn))
+                     ;; empty database with only transaction applied
+                     (:db-after (d/with (dc/empty-db) txn))
+                     txn
+                     '[[(ancestor ?e1 ?e2)
+                        [?e1 :ancestor ?e2]]
+                       [(ancestor ?e1 ?e2)
+                        [?e1 :ancestor ?t]
+                        (ancestor ?t ?e2)]])]
+        (d/delete-database uri)
+        res))))
+
 (deftest cycle-invariant-test
   (testing "A test checking a graph for cycles."
     ;; match cycles in all graphs
-    (is (= 3
-           (let [uri "datahike:mem:///invariant-test"]
-             (d/create-database uri :schema-on-read true)
-             (binding [conn (d/connect uri)]
-               (d/transact conn [{:db/id    1
-                                  :ancestor 2}
-                                 {:db/id    2
-                                  :ancestor 3}])
-               (let [q   '[:find (count ?a) .
-                           :in $before $after $empty+txs $txs %
-                           :where
-                           ($after ancestor ?a ?b)
-                           [(= ?a ?b)]]
-                     txn [{:db/id    3
-                           :ancestor 1}]
-                     res
-                     (d/q q
-                          ;; current state
-                          @conn
-                          ;; apply transaction to current state
-                          (:db-after (d/with @conn txn))
-                          ;; empty database with only transaction applied
-                          (:db-after (d/with (dc/empty-db) txn))
-                          txn
-                          '[[(ancestor ?e1 ?e2)
-                             [?e1 :ancestor ?e2]]
-                            [(ancestor ?e1 ?e2)
-                             [?e1 :ancestor ?t]
-                             (ancestor ?t ?e2)]])]
-                 (d/delete-database uri)
-                 res)))))
+    (is (= 3 (cycle-query [{:db/id 3 :ancestor 1}])))
 
-    (is (nil?
-         (let [uri "datahike:mem:///invariant-test"]
-           (d/create-database uri :schema-on-read true)
-           (binding [conn (d/connect uri)]
-             (d/transact conn [{:db/id    1
-                                :ancestor 2}
-                               {:db/id    2
-                                :ancestor 3}])
-             (let [q   '[:find (count ?a) .
-                         :in $before $after $empty+txs $txs %
-                         :where
-                         ($after ancestor ?a ?b)
-                         [(= ?a ?b)]]
-                   txn [{:db/id    3
-                         :ancestor 4}]
-                   res
-                   (d/q q
-                        ;; current state
-                        @conn
-                        ;; apply transaction to current state
-                        (:db-after (d/with @conn txn))
-                        ;; empty database with only transaction applied
-                        (:db-after (dc/empty-db) txn)
-                        txn
-                        '[[(ancestor ?e1 ?e2)
-                           [?e1 :ancestor ?e2]]
-                          [(ancestor ?e1 ?e2)
-                           [?e1 :ancestor ?t]
-                           (ancestor ?t ?e2)]])]
-               (d/delete-database uri)
-               res)))))))
+    (is (nil? (cycle-query [{:db/id 3 :ancestor 4}])))))
 
 (deftest invariant-deployment
   (testing "Testing deployment of valid invariant."
