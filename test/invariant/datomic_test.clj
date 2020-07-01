@@ -62,68 +62,36 @@
   (testing "Testing deployment of bad invariant."
     (is (common/bad-invariant-deployment? backend schema))))
 
+(let [q       '[:find  (count ?a) .
+                :in    $before $after $empty+txs $txs %
+                :where
+                ($after ancestor ?a ?b)
+                [(= ?a ?b)]]
+      pre-txn [{:db/id 1 :ancestor 2}
+               {:db/id 2 :ancestor 3}]]
+  (defn cycle-query [txn]
+    (let [empty-db (d/db conn)]
+      @(d/transact conn pre-txn)
+      (d/q q
+           ;; current state
+           (d/db conn)
+           ;; apply transaction to current state
+           (:db-after (d/with (d/db conn) txn))
+           ;; empty database with only transaction applied
+           (:db-after (d/with empty-db txn))
+           txn
+           '[[(ancestor ?e1 ?e2)
+              [?e1 :ancestor ?e2]]
+             [(ancestor ?e1 ?e2)
+              [?e1 :ancestor ?t]
+              (ancestor ?t ?e2)]]))))
+
 (deftest cycle-invariant-test
   (testing "A test checking a graph for cycles."
     ;; match cycles in all graphs
-    (is (= 3
-           (let [q        '[:find  (count ?a) .
-                            :in    $before $after $empty+txs $txs %
-                            :where
-                            ($after ancestor ?a ?b)
-                            [(= ?a ?b)]]
-                 ;; initial DB
-                 empty-db (d/db conn)
-                 _        @(d/transact conn [{:db/id    1
-                                              :ancestor 2}
-                                             {:db/id    2
-                                              :ancestor 3}])
-                 txn      [{:db/id    3
-                            :ancestor 1}]
-                 res
-                 (d/q q
-                      ;; current state
-                      (d/db conn)
-                      ;; apply transaction to current state
-                      (:db-after (d/with (d/db conn) txn))
-                      ;; empty database with only transaction applied
-                      (:db-after (d/with empty-db txn))
-                      txn
-                      '[[(ancestor ?e1 ?e2)
-                         [?e1 :ancestor ?e2]]
-                        [(ancestor ?e1 ?e2)
-                         [?e1 :ancestor ?t]
-                         (ancestor ?t ?e2)]])]
-             res)))
+    (is (= 3 (cycle-query [{:db/id 3 :ancestor 1}])))
 
-    (is (nil?
-         (let [q        '[:find (count ?a) .
-                          :in   $before $after $empty+txs $txs %
-                          :where
-                          ($after ancestor ?a ?b)
-                          [(= ?a ?b)]]
-               ;; initial DB
-               empty-db (d/db conn)
-               _        @(d/transact conn [{:db/id    1
-                                            :ancestor 2}
-                                           {:db/id    2
-                                            :ancestor 3}])
-               txn      [{:db/id    3
-                          :ancestor 4}]
-               res
-               (d/q q
-                    ;; current state
-                    (d/db conn)
-                    ;; apply transaction to current state
-                    (:db-after (d/with (d/db conn) txn))
-                    ;; empty database with only transaction applied
-                    (:db-after (d/with empty-db txn))
-                    txn
-                    '[[(ancestor ?e1 ?e2)
-                       [?e1 :ancestor ?e2]]
-                      [(ancestor ?e1 ?e2)
-                       [?e1 :ancestor ?t]
-                       (ancestor ?t ?e2)]])]
-           res)))))
+    (is (nil? (cycle-query [{:db/id 3 :ancestor 4}])))))
 
 (deftest invariant-deployment
   (testing "Testing deployment of valid invariant."
