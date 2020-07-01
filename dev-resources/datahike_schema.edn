@@ -1,21 +1,21 @@
-[#:db{:ident :invariant/rule
-      :valueType :db.type/keyword
+[#:db{:ident       :invariant/rule
+      :valueType   :db.type/keyword
       :cardinality :db.cardinality/one}
- #:db{:ident :parent
-      :valueType :db.type/ref
+ #:db{:ident       :parent
+      :valueType   :db.type/ref
       :cardinality :db.cardinality/one}
- #:db{:ident :invariant/query
-      :valueType :db.type/string
+ #:db{:ident       :invariant/query
+      :valueType   :db.type/string
       :cardinality :db.cardinality/one}
- #:db{:ident :account/name
-      :valueType :db.type/string
+ #:db{:ident       :account/name
+      :valueType   :db.type/string
       :cardinality :db.cardinality/one}
- #:db{:ident :account/balance
-      :valueType :db.type/bigdec
+ #:db{:ident       :account/balance
+      :valueType   :db.type/bigdec
       :cardinality :db.cardinality/one}
- #:db{:ident :account/unit
-      :valueType :db.type/keyword
+ #:db{:ident       :account/unit
+      :valueType   :db.type/keyword
       :cardinality :db.cardinality/one}
- #:db{:ident :transaction/signed-by
-      :valueType :db.type/long
+ #:db{:ident       :transaction/signed-by
+      :valueType   :db.type/long
       :cardinality :db.cardinality/many}]

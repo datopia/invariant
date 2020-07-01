@@ -1,12 +1,12 @@
 (ns invariant.datomic-test
-  (:require [clojure.test
-             :refer [deftest testing is] :as test]
+  (:require [clojure.test                :as test
+             :refer [deftest testing is]]
             [invariant.datomic           :as invariant.d]
             [invariant.test.common       :as common]
+            [invariant.backend           :as backend]
             [invariant.test.util
              :refer [read-resource]]
-            [datomic.api                 :as d]
-            [invariant.backend           :as backend]))
+            [datomic.api                 :as d]))
 
 (def ^:dynamic conn nil)
 
@@ -66,8 +66,8 @@
   (testing "A test checking a graph for cycles."
     ;; match cycles in all graphs
     (is (= 3
-           (let [q        '[:find (count ?a) .
-                            :in $before $after $empty+txs $txs %
+           (let [q        '[:find  (count ?a) .
+                            :in    $before $after $empty+txs $txs %
                             :where
                             ($after ancestor ?a ?b)
                             [(= ?a ?b)]]
@@ -97,7 +97,7 @@
 
     (is (nil?
          (let [q        '[:find (count ?a) .
-                          :in $before $after $empty+txs $txs %
+                          :in   $before $after $empty+txs $txs %
                           :where
                           ($after ancestor ?a ?b)
                           [(= ?a ?b)]]

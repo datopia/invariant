@@ -39,7 +39,7 @@
                                 (map :binding nested-functions))))))
        sources
        (map (comp unnest-deep-queries
-                        ;; subquery first argument
+                  ;; subquery first argument
                   #(concat (list 'api/q (list 'quote (second %))) sources)
                   first
                   unparse)

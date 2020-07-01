@@ -5,12 +5,14 @@
             [invariant.datahike          :as invariant.d
              :refer [+]]
             [invariant.test.common       :as common]
-            [invariant.query :refer [assert-valid-query assert-safe-query]]
+            [invariant.query
+             :refer [assert-valid-query assert-safe-query]]
+            [invariant.backend           :as backend]
             [invariant.test.util
              :refer [read-resource]]
-            [datahike.api :refer [q]     :as d]
-            [datahike.core  :as dc]
-            [invariant.backend           :as backend]))
+            [datahike.api                :as d
+             :refer [q]]
+            [datahike.core  :as dc]))
 
 (deftest attribute-test
   (testing "Attribute extraction."
@@ -80,7 +82,7 @@
                                  {:db/id    2
                                   :ancestor 3}])
                (let [q   '[:find (count ?a) .
-                           :in $before $after $empty+txs $txs %
+                           :in   $before $after $empty+txs $txs %
                            :where
                            ($after ancestor ?a ?b)
                            [(= ?a ?b)]]

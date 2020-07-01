@@ -6,7 +6,6 @@
   :dependencies [[org.clojure/clojure      "1.10.1"]
                  [org.clojure/tools.reader "1.3.2"]
                  [io.replikativ/datahike   "0.2.2-SNAPSHOT" :scope "provided"]
-                 [com.datomic/datomic-free "0.9.5697" :scope "provided"]]
+                 [com.datomic/datomic-free "0.9.5697"       :scope "provided"]]
   :plugins      [[lein-marginalia "0.9.1"]]
-  :profiles     {:dev {:dependencies []
-                       :source-paths ["test-support" "dev"]}})
+  :profiles     {:dev {:source-paths ["test-support" "dev"]}})
