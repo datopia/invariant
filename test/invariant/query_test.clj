@@ -14,6 +14,7 @@
                                                :in    $a
                                                :where [(= ?a 5) ?b]]
                                               $a) ?a]])))
+
     (is (= 'nested-evil
            (try
              (assert-safe-query '[:find ?a

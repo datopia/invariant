@@ -24,11 +24,7 @@
 
 (deftest valid-query-test
   (testing "Valid queries."
-    (is (= '{:type :invariant/invalid-function-call,
-             :call #datalog.parser.type.Predicate{:fn   #datalog.parser.type.PlainSymbol{:symbol nested-evil},
-                                                  :args [#datalog.parser.type.Variable{:symbol ?a}
-                                                         #datalog.parser.type.Constant{:value 5}]}}
-
+    (is (= :invariant/invalid-function-call
            (try
              (assert-valid-query '[:find ?a
                                    :in   $a $b $c $d
@@ -38,7 +34,7 @@
                                                :where [(nested-evil ?a 5)]]
                                               $a $b $c $d) ?a]])
              (catch Exception e
-               (ex-data e)))))))
+               (-> e ex-data :type)))))))
 
 (def schema (read-resource "datahike_schema.edn"))
 
@@ -70,20 +66,17 @@
   (testing "Testing deployment of bad invariant."
     (is (common/bad-invariant-deployment? backend schema))))
 
-(let [uri     "datahike:mem:///invariant-test"
-      q       '[:find  (count ?a) .
-                :in    $before $after $empty+txs $txs %
-                :where
-                ($after ancestor ?a ?b)
-                [(= ?a ?b)]]
-      pre-txn [{:db/id 1 :ancestor 2}
-               {:db/id 2 :ancestor 3}]]
+(let [uri "datahike:mem:///invariant-test"]
   (defn cycle-query [txn]
     (d/create-database uri :schema-on-read true)
     (binding [conn (d/connect uri)]
       (d/transact conn [{:db/id 1 :ancestor 2}
                         {:db/id 2 :ancestor 3}])
-      (let [res (d/q q
+      (let [res (d/q '[:find  (count ?a) .
+                       :in    $before $after $empty+txs $txs %
+                       :where
+                       ($after ancestor ?a ?b)
+                       [(= ?a ?b)]]
                      ;; current state
                      @conn
                      ;; apply transaction to current state
