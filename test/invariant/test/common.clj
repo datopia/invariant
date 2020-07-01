@@ -1,8 +1,11 @@
 (ns invariant.test.common
-  (:require [datahike.parser]
-            [invariant.test.util :refer [read-resource]]
-            [invariant.backend   :as backend]
-            [clojure.walk        :refer [prewalk-replace]]))
+  (:require [datalog.parser]
+            [datalog.parser.type]
+            [invariant.test.util
+             :refer [read-resource]]
+            [invariant.backend :as backend]
+            [clojure.walk
+             :refer [prewalk-replace]]))
 
 (def example-txs (read-resource "example_txs.edn"))
 
@@ -51,37 +54,37 @@
       '[$before $after $empty-with-txs $tx-ops])))
 
 (let [bad-invariant (read-resource "bad_invariant.edn")]
-  (defn bad-invariant-deployment? [backend]
+  (defn bad-invariant-deployment? [backend schema]
     (let [tid (backend/tempid backend -1)
           txn [[:db/add tid :invariant/rule  :account/balance]
                [:db/add tid :invariant/query (pr-str bad-invariant)]]]
       (= '{:type :invariant/invalid-function-call,
-           :call #datahike.parser.Predicate
-           {:fn #datahike.parser.PlainSymbol{:symbol evil-haha},
-            :args [#datahike.parser.Constant{:value 1}
-                   #datahike.parser.Constant{:value 2}
-                   #datahike.parser.Constant{:value 3}]}}
+           :call #datalog.parser.type.Predicate
+           {:fn   #datalog.parser.type.PlainSymbol{:symbol evil-haha},
+            :args [#datalog.parser.type.Constant{:value 1}
+                   #datalog.parser.type.Constant{:value 2}
+                   #datalog.parser.type.Constant{:value 3}]}}
          (try
-           (backend/assert-invariants backend txn)
+           (backend/assert-invariants backend txn schema)
            (catch Exception e
              (ex-data e)))))))
 
 (defn- adjust-invariant [q {bigdec? :bigdec?}]
   (prewalk-replace {'sum-change-expected (cond-> 0 bigdec? bigdec)} q))
 
-(defn deployed-valid-invariant? [backend & [opts]]
+(defn deployed-valid-invariant? [backend schema & [opts]]
   (let [q   (adjust-invariant (read-resource "valid_invariant.edn") opts)
         tid (backend/tempid backend :db.part/user)
         txn [[:db/add tid :invariant/rule  :account/balance]
              [:db/add tid :invariant/query (pr-str q)]]]
-    (backend/assert-invariants backend txn)
+    (backend/assert-invariants backend txn schema)
     @(backend/transact backend txn)
     true))
 
-(defn balance-mismatch? [backend txs]
+(defn balance-mismatch? [backend txs schema]
   (= {:type      :invariant/invariant-mismatch,
       :attribute :account/balance}
      (try
-       (backend/assert-invariants backend txs)
+       (backend/assert-invariants backend txs schema)
        (catch Exception e
          (select-keys (ex-data e) #{:type :attribute})))))

@@ -1,5 +1,7 @@
 (ns invariant.core)
 
+;; TODO why not protocol?
+
 (defn invariant-dispatch [connection _ _]
   (cond (and (:schema connection)
              (:rschema connection))

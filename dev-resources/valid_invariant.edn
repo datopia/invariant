@@ -19,10 +19,11 @@
              [(>= ?balance-after 0)]
 
              ;; 3. Sender spending
-             #_[$txn    _                 :transaction/signed-by ?sender]
-             #_[(datopia.attribute-invariants/balance-check
-                 ?sender ?affected-entity ?balance-before ?balance-after)]]
+             [$txs _ _ :transaction/signed-by ?sender]
+             [(= ?sender ?affected-entity) ?is-sender]
+             [(>= ?balance-change 0) ?pos-change]
+             [(or ?is-sender ?pos-change)]]
             $before $after $empty+txs $txs)
   [[?sum-before ?sum-after ?sum-change]]]
  [(= ?sum-before ?sum-after)]
- [(= ?sum-change sum-change-expected) ?matches]]
+ [(== ?sum-change 0) ?matches]]

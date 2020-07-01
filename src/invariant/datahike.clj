@@ -37,14 +37,13 @@
        ;; apply transaction to current state
        (dc/db-with @conn tx-data)
        ;; empty database with only transaction applied
-       (dc/db-with (dc/empty-db schema) tx-data)
+       (dc/db-with (dc/empty-db) (concat schema tx-data))
        tx-data))
 
-(defn assert-invariants [conn tx-data]
+(defn assert-invariants [conn tx-data schema]
   (let [attr-txs (for [tx tx-data]
                    [(get-attribute tx) tx])
-        attrs    (distinct (map first attr-txs))
-        schema   (:schema @conn)]
+        attrs    (distinct (map first attr-txs))]
     (doseq [[a tx] attr-txs
             :when (= a :invariant/query)
             :let  [[_ _ _ v] tx]]
@@ -63,4 +62,4 @@
 
 (defmethod invariant.core/invariant :datahike
   [conn schema tx-data]
-  (assert-invariants conn tx-data))
+  (assert-invariants conn tx-data schema))

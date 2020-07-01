@@ -1,30 +1,35 @@
-[#:db{:id #db/id[:db.part/db]
-      :ident :invariant/rule
-      :valueType :db.type/keyword
-      :cardinality :db.cardinality/one
+[#:db{:id                    #db/id[:db.part/db]
+      :ident                 :invariant/rule
+      :valueType             :db.type/keyword
+      :cardinality           :db.cardinality/one
       :db.install/_attribute :db.part/db}
- #:db{:id #db/id[:db.part/db]
-      :ident :invariant/query
-      :valueType :db.type/string
-      :cardinality :db.cardinality/one
+ #:db{:id                    #db/id[:db.part/db]
+      :ident                 :parent
+      :valueType             :db.type/ref
+      :cardinality           :db.cardinality/one
       :db.install/_attribute :db.part/db}
- #:db{:id #db/id[:db.part/db]
-      :ident :account/name
-      :valueType :db.type/string
-      :cardinality :db.cardinality/one
+ #:db{:id                    #db/id[:db.part/db]
+      :ident                 :invariant/query
+      :valueType             :db.type/string
+      :cardinality           :db.cardinality/one
       :db.install/_attribute :db.part/db}
- #:db{:id #db/id[:db.part/db]
-      :ident :account/balance
-      :valueType :db.type/bigdec
-      :cardinality :db.cardinality/one
+ #:db{:id                    #db/id[:db.part/db]
+      :ident                 :account/name
+      :valueType             :db.type/string
+      :cardinality           :db.cardinality/one
       :db.install/_attribute :db.part/db}
- #:db{:id #db/id[:db.part/db]
-      :ident :account/unit
-      :valueType :db.type/keyword
-      :cardinality :db.cardinality/one
+ #:db{:id                    #db/id[:db.part/db]
+      :ident                 :account/balance
+      :valueType             :db.type/bigdec
+      :cardinality           :db.cardinality/one
       :db.install/_attribute :db.part/db}
- #:db{:id #db/id[:db.part/db]
-      :ident :transaction/signed-by
-      :valueType :db.type/long
-      :cardinality :db.cardinality/many
+ #:db{:id                    #db/id[:db.part/db]
+      :ident                 :account/unit
+      :valueType             :db.type/keyword
+      :cardinality           :db.cardinality/one
+      :db.install/_attribute :db.part/db}
+ #:db{:id                    #db/id[:db.part/db]
+      :ident                 :transaction/signed-by
+      :valueType             :db.type/long
+      :cardinality           :db.cardinality/many
       :db.install/_attribute :db.part/db}]
