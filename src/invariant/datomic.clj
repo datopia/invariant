@@ -1,12 +1,15 @@
 (ns invariant.datomic
   (:refer-clojure :exclude [+])
-  (:require [datomic.api     :as api]
+  (:require [clojure.edn     :as edn]
+            [datomic.api     :as api]
             [datalog.parser  :as p]
-            [clojure.edn     :as edn]
+            [datalog.unparser
+             :refer [unparse]]
             [invariant.core]
             [invariant.query
-             :refer [assert-valid-query invariant-query]]
-            [datalog.unparser :refer [unparse]]))
+             :refer [assert-valid-query invariant-query]])
+  (:import  [datalog.parser.type
+             Function]))
 
 (defn get-attribute-dispatch [v]
   (first v))
@@ -22,7 +25,7 @@
   a)
 
 (let [subq-selector (comp #{'subquery} :symbol :fn)
-      fn-selector   (comp #{datalog.parser.type.Function} type)]
+      fn-selector   (comp #{Function} type)]
   (defn unnest-deep-queries [[_ [_ query] & sources]]
     (let [res              (p/parse query)
           clean-clauses    (remove subq-selector (:qwhere res))
@@ -89,19 +92,19 @@
                    [(get-attribute tx) tx])
         attrs    (distinct (map first attr-txs))]
     (doseq [[a tx] attr-txs
-            :when (= a :invariant/query)
-            :let [[_ _ _ v] tx]]
+            :when  (= a :invariant/query)
+            :let   [[_ _ _ v] tx]]
       (assert-valid-query (edn/read-string v)))
 
-    (doseq [a attrs
-            :let [inv-qs (api/q invariant-query (api/db conn) a)]
+    (doseq [a     attrs
+            :let  [inv-qs (api/q invariant-query (api/db conn) a)]
             :when inv-qs]
       (when-not (invariant-holds? inv-qs conn tx-data schema)
         (throw (ex-info "Invariant mismatch."
-                        {:type      :invariant/invariant-mismatch
-                         :attribute a
-                         :invariant (edn/read-string inv-qs)
-                         :tx-data   tx-data}))))
+                 {:type      :invariant/invariant-mismatch
+                  :attribute a
+                  :invariant (edn/read-string inv-qs)
+                  :tx-data   tx-data}))))
     true))
 
 (defmethod invariant.core/invariant :datomic

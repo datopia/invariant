@@ -1,12 +1,12 @@
 (ns invariant.datahike
   (:refer-clojure :exclude [+])
-  (:require [datahike.api   :as d]
+  (:require [clojure.edn    :as edn]
+            [datahike.api   :as d]
             [datahike.core  :as dc]
             [datahike.query :as dq]
             [invariant.core]
             [invariant.query
-             :refer [assert-valid-query invariant-query]]
-            [clojure.edn :as edn]))
+             :refer [assert-valid-query invariant-query]]))
 
 (alter-var-root #'dq/built-ins assoc 'subquery datahike.api/q)
 
@@ -45,19 +45,19 @@
                    [(get-attribute tx) tx])
         attrs    (distinct (map first attr-txs))]
     (doseq [[a tx] attr-txs
-            :when (= a :invariant/query)
-            :let  [[_ _ _ v] tx]]
+            :when  (= a :invariant/query)
+            :let   [[_ _ _ v] tx]]
       (assert-valid-query (edn/read-string v)))
 
-    (doseq [a attrs
+    (doseq [a     attrs
             :let  [inv-qs (d/q invariant-query @conn a)]
             :when inv-qs]
       (when-not (invariant-holds? inv-qs conn tx-data schema)
         (throw (ex-info "Invariant mismatch."
-                        {:type      :invariant/invariant-mismatch
-                         :attribute a
-                         :invariant (edn/read-string inv-qs)
-                         :tx-data   tx-data}))))
+                 {:type      :invariant/invariant-mismatch
+                  :attribute a
+                  :invariant (edn/read-string inv-qs)
+                  :tx-data   tx-data}))))
     true))
 
 (defmethod invariant.core/invariant :datahike
