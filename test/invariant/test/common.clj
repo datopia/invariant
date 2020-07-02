@@ -58,16 +58,11 @@
     (let [tid (backend/tempid backend -1)
           txn [[:db/add tid :invariant/rule  :account/balance]
                [:db/add tid :invariant/query (pr-str bad-invariant)]]]
-      (= '{:type :invariant/invalid-function-call,
-           :call #datalog.parser.type.Predicate
-           {:fn   #datalog.parser.type.PlainSymbol{:symbol evil-haha},
-            :args [#datalog.parser.type.Constant{:value 1}
-                   #datalog.parser.type.Constant{:value 2}
-                   #datalog.parser.type.Constant{:value 3}]}}
+      (= :invariant/invalid-function-call
          (try
            (backend/assert-invariants backend txn schema)
            (catch Exception e
-             (ex-data e)))))))
+             (-> e ex-data :type)))))))
 
 (defn- adjust-invariant [q {bigdec? :bigdec?}]
   (prewalk-replace {'sum-change-expected (cond-> 0 bigdec? bigdec)} q))
