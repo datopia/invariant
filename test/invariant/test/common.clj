@@ -1,11 +1,11 @@
 (ns invariant.test.common
-  (:require [datalog.parser]
+  (:require [clojure.walk
+             :refer [prewalk-replace]]
+            [datalog.parser]
             [datalog.parser.type]
             [invariant.test.util
              :refer [read-resource]]
-            [invariant.backend :as backend]
-            [clojure.walk
-             :refer [prewalk-replace]]))
+            [invariant.backend :as backend]))
 
 (def example-txs (read-resource "example_txs.edn"))
 
