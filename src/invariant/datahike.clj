@@ -40,8 +40,23 @@
        (dc/db-with (dc/empty-db) (concat schema tx-data))
        tx-data))
 
+(defn- expand-map [m]
+  (let [id (or (:db/id m) (d/tempid -1))
+        m  (dissoc m :db/id)]
+    (for [[attr value] m]
+      [:db/add id attr value])))
+
+(defn- expand-tx [tx]
+  (mapcat
+   (fn [entry]
+     (if (map? entry)
+       (expand-map entry)
+       [entry]))
+   tx))
+
 (defn assert-invariants [conn tx-data schema]
-  (let [attr-txs (for [tx tx-data]
+  (let [tx-data  (expand-tx tx-data)
+        attr-txs (for [tx tx-data]
                    [(get-attribute tx) tx])
         attrs    (distinct (map first attr-txs))]
     (doseq [[a tx] attr-txs
