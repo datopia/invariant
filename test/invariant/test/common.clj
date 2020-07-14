@@ -82,9 +82,12 @@
     true))
 
 (defn balance-mismatch? [backend txs schema]
-  (= {:type      :invariant/invariant-mismatch,
-      :attribute :account/balance}
-     (try
-       (backend/assert-invariants backend txs schema)
-       (catch Exception e
-         (select-keys (ex-data e) #{:type :attribute})))))
+  (try
+    (backend/assert-invariants backend txs schema)
+    false
+    (catch Exception e
+      (when-not (= {:type      :invariant/invariant-mismatch,
+                    :attribute :account/balance}
+                   (select-keys (ex-data e) #{:type :attribute}))
+        (throw e))
+      true)))

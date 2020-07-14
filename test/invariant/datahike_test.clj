@@ -99,18 +99,20 @@
 
     (is (nil? (cycle-query [{:db/id 3 :ancestor 4}])))))
 
-(deftest invariant-deployment
+(deftest invariant-upheld
   (testing "Testing deployment of valid invariant."
-    (is (common/deployed-valid-invariant? backend schema))
+    (is (common/deployed-valid-invariant? backend schema)))
 
+  (testing "Valid transactions."
     (let [txn [[:db.fn/call + 3 :account/balance  +1]
                [:db.fn/call + 1 :account/balance  -3]
                [:db.fn/call + 2 :account/balance -50]
                [:db.fn/call + 3 :account/balance +52]
                [:db/add 1 :transaction/signed-by 1]
                [:db/add 1 :transaction/signed-by 2]]]
-      (is (backend/assert-invariants backend txn schema)))
+      (is (backend/assert-invariants backend txn schema))))
 
+  (testing "Invalid transactions."
     ;; non-zero
     (let [txn [[:db.fn/call + 2 :account/balance +52]
                [:db.fn/call + 3 :account/balance  -2]
@@ -130,4 +132,24 @@
                [:db.fn/call + 2 :account/balance -50]
                [:db.fn/call + 3 :account/balance +52]
                [:db/add 1 :transaction/signed-by 3]]]
-      (is (common/balance-mismatch? backend txn schema)))))
+      (is (common/balance-mismatch? backend txn schema))))
+
+  (testing "Expansion of map forms."
+    (let [invalid-txs [[{:db/id           1
+                         :account/balance 0M}]
+                       [{:db/id                 1
+                         :account/balance       0M
+                         :transaction/signed-by 1}]
+                       [{:account/balance 1M}]
+                       [{:db/id        99
+                         :account/name "New User"}
+                        {:db/id                 99
+                         :account/balance       1M
+                         :transaction/signed-by 99}]]]
+      (doseq [tx invalid-txs]
+        (is (common/balance-mismatch? backend tx schema))))
+
+    (let [valid-txs [[{:account/name "New User"}]
+                     [{}]]]
+      (doseq [tx valid-txs]
+        (is (backend/assert-invariants backend tx schema))))))
