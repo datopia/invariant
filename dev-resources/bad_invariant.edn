@@ -26,4 +26,4 @@
             $before $after $txn $txs)
   [[?sum-before ?sum-after ?sum-change]]]
  [(= ?sum-before ?sum-after)]
- [(= ?sum-change 0) ?matches]])]]]
+ [(= ?sum-change 0) ?matches]]

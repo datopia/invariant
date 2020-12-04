@@ -1,19 +1,21 @@
 (ns invariant.query
   (:require [datalog.parser :as p]
             [datalog.parser.type]
-            [datahike.query]))
+            [datahike.query])
+  (:import  [datalog.parser.type
+             Function
+             Predicate]))
 
 (def invariant-query '[:find ?q .
-                       :in $ ?a
+                       :in   $ ?a
                        :where
-                       [?e :invariant/rule ?a]
+                       [?e :invariant/rule  ?a]
                        [?e :invariant/query ?q]])
 
 (def ^:dynamic *allowed-fns*
   (into #{'subquery} (keys datahike.query/built-ins)))
 
-(def ^:private fn-selector (comp #{datalog.parser.type.Function
-                                   datalog.parser.type.Predicate} type))
+(def ^:private fn-selector (comp #{Function Predicate} type))
 
 (defn assert-safe-query [query]
   (doseq [c    (filter fn-selector (:qwhere (p/parse query)))

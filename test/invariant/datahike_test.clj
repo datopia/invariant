@@ -12,7 +12,7 @@
              :refer [read-resource]]
             [datahike.api                :as d
              :refer [q]]
-            [datahike.core  :as dc]))
+            [datahike.core               :as dc]))
 
 (deftest attribute-test
   (testing "Attribute extraction."
