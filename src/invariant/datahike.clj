@@ -54,10 +54,10 @@
             :when inv-qs]
       (when-not (invariant-holds? inv-qs conn tx-data schema)
         (throw (ex-info "Invariant mismatch."
-                 {:type      :invariant/invariant-mismatch
-                  :attribute a
-                  :invariant (edn/read-string inv-qs)
-                  :tx-data   tx-data}))))
+                        {:type      :invariant/invariant-mismatch
+                         :attribute a
+                         :invariant (edn/read-string inv-qs)
+                         :tx-data   tx-data}))))
     true))
 
 (defmethod invariant.core/invariant :datahike
