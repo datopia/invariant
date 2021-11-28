@@ -53,6 +53,7 @@
 
 (let [uri "datahike:mem:///invariant-test"]
   (defn datahike-db-fixture [f]
+    (d/delete-database uri)
     (d/create-database uri)
     (binding [conn (d/connect uri)]
       (d/transact conn schema)
@@ -68,6 +69,7 @@
 
 (let [uri "datahike:mem:///invariant-test"]
   (defn cycle-query [txn]
+    (d/delete-database uri)
     (d/create-database uri :schema-on-read true)
     (binding [conn (d/connect uri)]
       (d/transact conn [{:db/id 1 :ancestor 2}
