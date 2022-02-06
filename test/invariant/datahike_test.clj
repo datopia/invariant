@@ -49,7 +49,7 @@
     (assert-invariants [_ txs schema]
       (invariant.d/assert-invariants conn txs schema))
     (transact [_ txs]
-      (d/transact! conn txs))))
+      (d/transact! conn {:tx-data txs}))))
 
 (let [uri "datahike:mem:///invariant-test"]
   (defn datahike-db-fixture [f]
