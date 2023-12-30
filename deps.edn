@@ -1,0 +1,11 @@
+{:deps {org.clojure/clojure {:mvn/version "1.11.1"}
+        io.replikativ/datahike {:mvn/version "0.6.1555" } }
+
+ :paths ["src" "target/classes" "test" "test-support" "dev-resources"]
+
+ :aliases {:dev {:extra-paths ["test-support" "dev" "test"]
+                 :extra-deps {org.clojure/tools.namespace {:mvn/version "1.1.0"}
+                              cider/cider-nrepl           {:mvn/version "0.27.2"}
+                              nrepl/nrepl                 {:mvn/version "0.8.3"}}}}
+           :test {:extra-paths ["test"]
+                  :extra-deps {lambdaisland/kaocha       {:mvn/version "1.60.945"}}}}

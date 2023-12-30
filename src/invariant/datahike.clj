@@ -3,17 +3,19 @@
   (:require [datahike.api   :as d]
             [datahike.core  :as dc]
             [datahike.query :as dq]
-            [invariant.core]
             [invariant.query
              :refer [assert-valid-query invariant-query]]
             [clojure.edn :as edn]))
 
-(alter-var-root #'dq/built-ins assoc 'subquery datahike.api/q)
+(alter-var-root #'dq/built-ins assoc 'q datahike.api/q)
 
-(defn + [db eid attr delta]
-  (let [m (d/pull db [attr] eid)
-        v (attr m 0)]
-    [[:db/add eid attr (clojure.core/+ v delta)]]))
+(defn + [db selector attr delta]
+  (let [m (d/entity db selector)
+        eid (or (:db/id m) (d/tempid :db.part/user))
+        v (attr m 0M)] 
+    (concat (when (and (neg? eid) (seq selector))
+              [[:db/add eid (first selector) (second selector)]])
+            [[:db/add eid attr (clojure.core/+ v delta)]])))
 
 (defn get-attribute-dispatch [v]
   (let [[a b] v]
@@ -31,14 +33,19 @@
   a)
 
 (defn- invariant-holds? [inv-qs conn tx-data schema]
-  (d/q (edn/read-string inv-qs)
+  (let [;; create empty memory database with only schema
+        empty-cfg (d/create-database (dissoc (:config @(:wrapped-atom conn)) :store))
+        empty-conn (d/connect empty-cfg)
+        empty+datoms (dc/db-with @empty-conn (concat schema tx-data))
+        _ (d/release empty-conn)]
+    (d/q (edn/read-string inv-qs)
        ;; current state
-       @conn
+         @conn
        ;; apply transaction to current state
-       (dc/db-with @conn tx-data)
+         (dc/db-with @conn tx-data)
        ;; empty database with only transaction applied
-       (dc/db-with (dc/empty-db) (concat schema tx-data))
-       tx-data))
+         empty+datoms
+         tx-data)))
 
 (defn assert-invariants [conn tx-data schema]
   (let [attr-txs (for [tx tx-data]
@@ -52,6 +59,7 @@
     (doseq [a attrs
             :let  [inv-qs (d/q invariant-query @conn a)]
             :when inv-qs]
+      (println "Checking invariant" a inv-qs)
       (when-not (invariant-holds? inv-qs conn tx-data schema)
         (throw (ex-info "Invariant mismatch."
                         {:type      :invariant/invariant-mismatch
@@ -59,7 +67,3 @@
                          :invariant (edn/read-string inv-qs)
                          :tx-data   tx-data}))))
     true))
-
-(defmethod invariant.core/invariant :datahike
-  [conn schema tx-data]
-  (assert-invariants conn tx-data schema))

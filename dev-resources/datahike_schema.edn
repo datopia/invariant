@@ -9,13 +9,17 @@
       :cardinality :db.cardinality/one}
  #:db{:ident       :account/name
       :valueType   :db.type/string
-      :cardinality :db.cardinality/one}
+      :cardinality :db.cardinality/one
+      :unique      :db.unique/identity}
  #:db{:ident       :account/balance
       :valueType   :db.type/bigdec
       :cardinality :db.cardinality/one}
  #:db{:ident       :account/unit
       :valueType   :db.type/keyword
       :cardinality :db.cardinality/one}
- #:db{:ident       :transaction/signed-by
-      :valueType   :db.type/long
-      :cardinality :db.cardinality/many}]
+ #:db{:ident       :datopia/signed-by
+      :valueType   :db.type/string
+      :cardinality :db.cardinality/one}
+ #:db{:ident       :datopia/signature
+      :valueType   :db.type/string
+      :cardinality :db.cardinality/one}]
