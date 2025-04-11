@@ -67,3 +67,26 @@
                          :invariant (edn/read-string inv-qs)
                          :tx-data   tx-data}))))
     true))
+
+
+(defn transact-with-invariants
+  "Transaction wrapper that enforces invariants before committing.
+   
+   Takes a Datahike connection, transaction data, and schema transactions.
+   Checks all relevant invariants before committing the transaction.
+   
+   Parameters:
+   - conn: Datahike connection
+   - tx-data: Transaction data (vector of datoms or map with :tx-data key)
+   - schema: Schema transactions required for invariant checking
+   
+   Returns:
+   - The direct result from datahike.api/transact, if invariants are satisfied
+   - Throws an exception if any invariant is violated
+   
+   Note: For operations where invariants should be skipped (e.g., schema updates),
+   use datahike.api/transact directly instead."
+  [conn tx-data schema]
+  (let [tx-data (if (map? tx-data) (:tx-data tx-data) tx-data)]
+    (assert-invariants conn tx-data schema)
+    (d/transact conn {:tx-data tx-data})))
