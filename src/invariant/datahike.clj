@@ -1,6 +1,7 @@
 (ns invariant.datahike
   (:refer-clojure :exclude [+])
   (:require [clojure.edn :as edn]
+            [clojure.walk :as walk]
             [datahike.api   :as d]
             [datahike.core  :as dc]
             [datahike.query :as dq]
@@ -157,30 +158,103 @@
   [conn schema-or-nil]
   (->schema-tx (or schema-or-nil (:schema @conn))))
 
+;; ============================================================================
+;; Lookup-ref resolution for the $empty+txs source
+;;
+;; Real-world tx-data references existing entities via lookup-refs:
+;;
+;;   {:posting/account [:account/code "1000"]
+;;    :posting/commodity [:commodity/symbol "USD"]}
+;;
+;; Without seeding, the third source ($empty+txs) — built by `dc/db-with`
+;; on a fresh empty-db — throws `:entity-id/missing` on any tx-data
+;; containing a lookup-ref: the empty-db has the schema but no entities
+;; to resolve `[:account/code "1000"]` against.
+;;
+;; The fix: walk tx-data for lookup-refs, resolve each against the LIVE
+;; conn, seed the empty-db with stub `{:db/id <eid> <unique-attr> <val>}`
+;; maps BEFORE applying tx-data. The user's tx-data is preserved verbatim
+;; in $empty+txs (so any invariant that reads `[$empty+txs ?p :a ?v]` +
+;; joins via `[$after ?v :b _]` keeps working — eid pinning keeps the
+;; `?v` binding consistent across the two sources).
+;; ============================================================================
+
+(defn- lookup-ref?
+  "A 2-element non-MapEntry vector whose first element is a USER
+   attribute keyword. Excludes 2-element tx-tuples like
+   `[:db/retractEntity 1]` (where the head is reserved `db.*`)."
+  [x]
+  (and (vector? x)
+       (not (map-entry? x))
+       (= 2 (count x))
+       (keyword? (first x))
+       (let [ns (namespace (first x))]
+         (or (nil? ns)
+             (and (not= ns "db")
+                  (not (.startsWith ^String ns "db.")))))))
+
+(defn- collect-lookup-refs
+  "Walk `tx-data` and return the set of every lookup-ref `[:attr value]`
+   encountered. Visits every position via `postwalk` so it catches
+   refs at entity-map values, tuple-tx value positions, `:db/id`
+   positions, and within cardinality-many vectors."
+  [tx-data]
+  (let [refs (atom #{})]
+    (walk/postwalk
+     (fn [x]
+       (when (lookup-ref? x) (swap! refs conj x))
+       x)
+     tx-data)
+    @refs))
+
+(defn- seed-from-lookup-refs
+  "For each lookup-ref `[attr val]` in `refs`, produce a seed map the
+   empty-db can apply so the user's tx-data's lookup-ref to the same
+   `[attr val]` resolves cleanly.
+
+   - Lookup-ref resolves in the live db → seed with `{:db/id <eid> attr
+     val}`. Pinning to the live eid keeps `?ref` bindings consistent
+     across `$after` and `$empty+txs` for join-by-eid invariant queries.
+   - Lookup-ref doesn't resolve (entity being CREATED by this same tx)
+     → seed with a tempid-keyed map so db-with creates it. The eid
+     won't match the live-db side, but for an entity that doesn't exist
+     in `$after` either, joins via that eid wouldn't fire anyway."
+  [db refs]
+  (->> refs
+       (map-indexed
+        (fn [i [a v :as ref]]
+          (if-let [eid (:db/id (d/entity db ref))]
+            {:db/id eid a v}
+            {:db/id (str "invariant/seed-" i) a v})))
+       vec))
+
 (defn- invariant-holds? [inv-qs conn tx-data schema-tx]
-  ;; Build the third query source ($empty+txs) by spinning up a fresh
-  ;; in-memory db, transacting the schema INTO it (via the normal
-  ;; transact path, not as an empty-db schema arg — that triggers
-  ;; strict validation rejecting valid specs in some edge cases),
-  ;; then applying tx-data.
-  ;;
-  ;; Use the source conn's `:schema-flexibility` so a `:write` conn
-  ;; doesn't get a `:read` empty-db that auto-defines attrs out from
-  ;; under us (or vice versa).
+  ;; Build $empty+txs by spinning up a fresh in-memory db, transacting
+  ;; the schema INTO it, seeding entities referenced by lookup-refs in
+  ;; tx-data, and applying tx-data. The seed pass is the key correctness
+  ;; bit: without it, any user tx-data referencing existing entities via
+  ;; lookup-refs (the realistic majority of business writes) crashes the
+  ;; third source with :entity-id/missing.
   (let [flex (or (:schema-flexibility @conn)
                  (get-in @conn [:config :schema-flexibility])
                  :read)
+        db           @conn
+        refs         (collect-lookup-refs tx-data)
+        seed         (seed-from-lookup-refs db refs)
         empty-db     (dc/empty-db nil {:schema-flexibility flex})
         empty+schema (if (seq schema-tx)
                        (dc/db-with empty-db schema-tx)
-                       empty-db)]
+                       empty-db)
+        empty+seed   (if (seq seed)
+                       (dc/db-with empty+schema seed)
+                       empty+schema)]
     (d/q (edn/read-string inv-qs)
          ;; current state
-         @conn
+         db
          ;; apply transaction to current state
-         (dc/db-with @conn tx-data)
-         ;; empty database with schema + transaction applied
-         (dc/db-with empty+schema tx-data)
+         (dc/db-with db tx-data)
+         ;; empty database with schema + lookup-ref seeds + tx applied
+         (dc/db-with empty+seed tx-data)
          tx-data)))
 
 (defn- spread-attrs

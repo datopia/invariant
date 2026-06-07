@@ -43,6 +43,135 @@
               consumer custom tx-fns don't crash the pipeline."
       (is (nil? (invariant.d/get-attribute [:db.fn/some-custom-fn 1 2 3]))))))
 
+;; ============================================================================
+;; Lookup-ref handling in the $empty+txs source
+;; ============================================================================
+;;
+;; Business writes typically reference existing entities via lookup-refs:
+;;
+;;   {:posting/account [:account/code "1000"]
+;;    :posting/commodity [:commodity/symbol "USD"]}
+;;
+;; The third invariant source `$empty+txs` (built by `db-with` on a
+;; fresh empty-db) would throw `:entity-id/missing` on this shape — the
+;; empty-db had the schema but no entities to resolve the lookup-ref
+;; against. The seeding pass added in invariant-holds? fixes this.
+
+(def ^:private collect-lookup-refs #'invariant.d/collect-lookup-refs)
+(def ^:private lookup-ref?         #'invariant.d/lookup-ref?)
+
+(deftest lookup-ref-predicate-shape-test
+  (testing "Plain 2-vec with keyword head is a lookup-ref"
+    (is (true? (lookup-ref? [:account/code "1000"])))
+    (is (true? (lookup-ref? [:commodity/symbol "USD"]))))
+  (testing "Tuples and non-2-element vectors are NOT lookup-refs"
+    (is (false? (lookup-ref? [:db/add 1 :foo 2])))
+    (is (false? (lookup-ref? [:db/retractEntity 1])))
+    (is (false? (lookup-ref? [:db.fn/cas 1 :foo 2 3])))
+    (is (false? (lookup-ref? [:a :b :c])))
+    (is (false? (lookup-ref? [42 "USD"])))
+    (is (false? (lookup-ref? "string"))))
+  (testing "MapEntries are 2-element vectors but explicitly rejected"
+    (is (false? (lookup-ref? (first {:db/id [:account/code "1000"]}))))))
+
+(deftest collect-lookup-refs-walks-all-positions-test
+  (testing "Lookup-refs at entity-map value positions"
+    (is (= #{[:account/code "1000"] [:commodity/symbol "USD"]}
+           (collect-lookup-refs
+            [{:db/id "p1"
+              :posting/account  [:account/code "1000"]
+              :posting/commodity [:commodity/symbol "USD"]}]))))
+  (testing "Lookup-refs at :db/id positions"
+    (is (= #{[:account/code "1000"]}
+           (collect-lookup-refs
+            [{:db/id [:account/code "1000"] :account/active false}]))))
+  (testing "Lookup-refs in tuple-tx value positions"
+    (is (= #{[:account/code "1000"]}
+           (collect-lookup-refs
+            [[:db/add "p1" :posting/account [:account/code "1000"]]]))))
+  (testing "Lookup-refs inside cardinality-many vectors"
+    (is (= #{[:entity/code "A"] [:entity/code "B"]}
+           (collect-lookup-refs
+            [{:db/id "e"
+              :entity/family [[:entity/code "A"] [:entity/code "B"]]}]))))
+  (testing "Tx-data without lookup-refs returns empty"
+    (is (= #{} (collect-lookup-refs [{:db/id 1 :foo 2}])))
+    (is (= #{} (collect-lookup-refs [[:db/add 1 :foo 2]])))))
+
+;; ---------------------------------------------------------------------------
+;; End-to-end: assert-invariants with lookup-refs in tx-data.
+;;
+;; Uses a minimal schema (account + ref-typed posting attr) so the test
+;; is independent of the main fixture. The invariant query mirrors what
+;; real consumers write: read postings from $empty+txs, then look up
+;; account properties via $after.
+;; ---------------------------------------------------------------------------
+
+(def ^:private lookup-ref-mini-schema
+  [{:db/ident :lr.account/code
+    :db/valueType :db.type/string
+    :db/unique :db.unique/identity
+    :db/cardinality :db.cardinality/one}
+   {:db/ident :lr.account/active
+    :db/valueType :db.type/boolean
+    :db/cardinality :db.cardinality/one}
+   {:db/ident :lr.posting/account
+    :db/valueType :db.type/ref
+    :db/cardinality :db.cardinality/one}
+   {:db/ident :invariant/rule
+    :db/valueType :db.type/keyword
+    :db/unique :db.unique/identity
+    :db/cardinality :db.cardinality/one}
+   {:db/ident :invariant/query
+    :db/valueType :db.type/string
+    :db/cardinality :db.cardinality/one}])
+
+(defn- lookup-ref-conn []
+  (let [cfg {:store {:backend :memory :id (java.util.UUID/randomUUID)}
+             :schema-flexibility :write
+             :keep-history? true}]
+    (d/create-database cfg)
+    (let [c (d/connect cfg)]
+      (d/transact c lookup-ref-mini-schema)
+      (d/transact c [{:lr.account/code "1000" :lr.account/active true}])
+      (d/transact c
+                  [{:invariant/rule  :lr.posting/account
+                    :invariant/query
+                    (pr-str
+                     '[:find ?ok .
+                       :in $before $after $empty+txs $txs
+                       :where
+                       [(q [:find ?p
+                            :in $after $empty+txs
+                            :where
+                            [$empty+txs ?p :lr.posting/account ?a]
+                            [$after ?a :lr.account/active false]]
+                           $after $empty+txs)
+                        ?violators]
+                       [(count ?violators) ?n]
+                       [(= 0 ?n) ?ok]])}])
+      c)))
+
+(deftest empty-db-source-resolves-lookup-refs-no-crash-test
+  (testing "tx-data with a lookup-ref no longer crashes the $empty+txs source"
+    (let [c  (lookup-ref-conn)
+          tx [{:db/id "p1" :lr.posting/account [:lr.account/code "1000"]}]]
+      (is (true? (invariant.d/assert-invariants c tx))))))
+
+(deftest empty-db-source-still-fires-invariant-on-violation-test
+  (testing "Flipping the referenced account inactive in the same tx
+            still triggers the registered invariant — the fix preserves
+            invariant semantics."
+    (let [c  (lookup-ref-conn)
+          tx [{:db/id "p1" :lr.posting/account [:lr.account/code "1000"]}
+              {:db/id [:lr.account/code "1000"] :lr.account/active false}]
+          ex (try (invariant.d/assert-invariants c tx)
+                  nil
+                  (catch clojure.lang.ExceptionInfo e e))]
+      (is (some? ex))
+      (is (= :invariant/invariant-mismatch (:type (ex-data ex))))
+      (is (= :lr.posting/account (:attribute (ex-data ex)))))))
+
 (deftest valid-query-test
   (testing "Valid queries."
     (is (= :invariant/invalid-function-call
