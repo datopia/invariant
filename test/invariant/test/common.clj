@@ -78,7 +78,9 @@
         txn [[:db/add tid :invariant/rule  :account/balance]
              [:db/add tid :invariant/query (pr-str q)]]]
     (backend/assert-invariants backend txn schema)
-    @(backend/transact backend txn)
+    ;; Datahike 0.8.x's `d/transact` returns a TxReport synchronously
+    ;; (no Future) — drop the deref the 0.6.x form used here.
+    (backend/transact backend txn)
     true))
 
 (defn balance-mismatch? [backend txs schema]
