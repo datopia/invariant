@@ -9,3 +9,10 @@ pom.xml.asc
 /.nrepl-port
 .hgignore
 .hg/
+# Editor / tooling caches (Calva, clojure-lsp, clj-kondo, deps cache)
+.calva/
+.clj-kondo/.cache/
+.cpcache/
+.lsp/
+# Regenerable marginalia uberdoc — built from source on demand
+docs/uberdoc.html
