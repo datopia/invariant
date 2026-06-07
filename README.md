@@ -109,22 +109,22 @@ The library provides a transaction wrapper that automatically checks invariants 
 ;; First, store your schema for later use
 (def schema-txs [...])  ;; Your database schema transactions
 
-;; Deploy schema and invariants using normal transact (no invariant checks)
-(d/transact conn {:tx-data schema-txs})
+;; Deploy schema using normal transact (no invariant checks)
+(d/transact conn schema-txs)
 
-;; Use the wrapper for normal operations to check invariants
-(id/transact-with-invariants conn transaction-data schema-txs)
+;; 2-arg form (recommended): schema is resolved from `@conn` automatically.
+(id/transact-with-invariants conn tx-data)
+
+;; 3-arg form (back-compat): pass schema explicitly. Useful during
+;; bootstrap when the conn's own schema isn't installed yet.
+(id/transact-with-invariants conn tx-data schema-txs)
 ```
 
 The `transact-with-invariants` function returns the transaction result directly, just like `datahike.api/transact`. This makes it easier to compose with other operations in your codebase.
 
 For operations where you need to bypass invariant checks (like schema updates), use `datahike.api/transact` directly.
 
-The `transact-with-invariants` function:
-1. Takes your connection, transaction data, and schema transactions
-2. Checks if any invariants apply to attributes in your transaction
-3. Validates that your transaction maintains all invariants
-4. Only commits the transaction if all invariants are satisfied
+`assert-invariants` has the same arity pair if you want to validate without transacting.
 
 #### Complete Example
 
@@ -135,10 +135,11 @@ Here's a complete example showing how to use invariants with the transaction wra
   (:require [datahike.api :as d]
             [invariant.datahike :as id]))
 
-;; 1. Create and connect to a database
-(def uri "datahike:mem:///my-db")
-(d/create-database uri)
-(def conn (d/connect uri))
+;; 1. Create and connect to a database (Datahike 0.8.x config form)
+(def cfg {:store              {:backend :memory :id (java.util.UUID/randomUUID)}
+          :schema-flexibility :write})
+(d/create-database cfg)
+(def conn (d/connect cfg))
 
 ;; 2. Define your schema with invariant support
 (def schema
@@ -160,8 +161,7 @@ Here's a complete example showing how to use invariants with the transaction wra
     :db/cardinality :db.cardinality/one}])
 
 ;; 3. Deploy schema using direct transaction (no invariant checks)
-(def schema-tx schema)
-(d/transact conn {:tx-data schema-tx})
+(d/transact conn schema)
 
 ;; 4. Create a zero-sum invariant for account balances
 (def balance-invariant
@@ -179,27 +179,23 @@ Here's a complete example showing how to use invariants with the transaction wra
     [(= ?before-sum ?after-sum)]
     [(= ?delta-sum 0M) ?valid]])
 
-;; 5. Deploy the invariant
-(def invariant-tx
-  [[:db/add (d/tempid :db.part/user) :invariant/rule :account/balance]
-   [:db/add (d/tempid :db.part/user) :invariant/query (pr-str balance-invariant)]])
-
-(id/transact-with-invariants conn invariant-tx schema-datoms)
+;; 5. Deploy the invariant (entity-map form — no tempids needed)
+(d/transact conn
+            [{:invariant/rule  :account/balance
+              :invariant/query (pr-str balance-invariant)}])
 
 ;; 6. Create initial accounts
-(def accounts-tx
-  [{:account/name "Alice" :account/balance 1000M}
-   {:account/name "Bob" :account/balance 500M}])
-
-(id/transact-with-invariants conn accounts-tx schema-datoms)
+(id/transact-with-invariants conn
+                             [{:account/name "Alice" :account/balance 1000M}
+                              {:account/name "Bob"   :account/balance  500M}])
 
 ;; 7. Valid transaction - zero sum transfer
 (def valid-tx
   [[:db.fn/call id/+ [:account/name "Alice"] :account/balance -100]
-   [:db.fn/call id/+ [:account/name "Bob"] :account/balance +100]
-   [:db/add (d/tempid :db.part/tx) :tx/signedBy "Alice"]])
+   [:db.fn/call id/+ [:account/name "Bob"]   :account/balance +100]
+   [:db/add "datomic.tx" :tx/signedBy "Alice"]])
 
-(id/transact-with-invariants conn valid-tx schema-datoms)
+(id/transact-with-invariants conn valid-tx)
 
 ;; 8. Invalid transaction - creates money out of nowhere
 (def invalid-tx
@@ -207,10 +203,10 @@ Here's a complete example showing how to use invariants with the transaction wra
    [:db.fn/call id/+ [:account/name "Bob"] :account/balance +50]])
 
 ;; This will throw an exception:
-;; (id/transact-with-invariants conn invalid-tx schema-datoms)
+;; (id/transact-with-invariants conn invalid-tx)
 ```
 
-By using this pattern, you ensure that all transaction operations preserve your domain invariants. For a real-world application, you may want to modify the transaction wrapper to extract the schema internally or cache it for performance.
+By using this pattern, you ensure that all transaction operations preserve your domain invariants. The 2-arg `transact-with-invariants` resolves schema from `@conn` automatically, so consumers don't need to thread the schema vector through every call.
 
 For more complex examples, look at the `datahike_test.clj` file in the tests directory.
 
